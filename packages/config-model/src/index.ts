@@ -75,6 +75,15 @@ import {
   ConfigurationSnapshotSchema,
   SnapshotFlag,
   SnapshotFlagSchema,
+  AuditEvent,
+  AuditEventSchema,
+  AuditEventIdSchema,
+  ActorIdSchema,
+  AuditActionSchema,
+  AuditResourceTypeSchema,
+  AuditResourceIdSchema,
+  CreateAuditEventInput,
+  CreateAuditEventInputSchema,
 } from '@controlplane/contracts';
 import { randomUUID, createHash } from 'node:crypto';
 
@@ -155,6 +164,15 @@ export {
   CreateConfigurationVersionInputSchema,
   ConfigurationSnapshotSchema,
   SnapshotFlagSchema,
+  type AuditEvent,
+  type CreateAuditEventInput,
+  AuditEventSchema,
+  AuditEventIdSchema,
+  ActorIdSchema,
+  AuditActionSchema,
+  AuditResourceTypeSchema,
+  AuditResourceIdSchema,
+  CreateAuditEventInputSchema,
 };
 
 // --- Organization Domain Entity & Helpers ---
@@ -1007,5 +1025,114 @@ export class InMemoryConfigurationVersionRepository implements ConfigurationVers
     return Array.from(this.versions.values())
       .filter((v) => v.environmentId === environmentId)
       .sort((a, b) => a.version - b.version);
+  }
+}
+
+// --- Audit Event Domain Entity & Helpers (Milestone 1.8) ---
+
+export interface CreateAuditEventOptions {
+  organizationId: string;
+  actorId: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  id?: string;
+  now?: string;
+}
+
+/**
+ * Creates an immutable AuditEvent domain model.
+ */
+export function createAuditEvent(options: CreateAuditEventOptions): AuditEvent {
+  const parsedInput = CreateAuditEventInputSchema.parse({
+    organizationId: options.organizationId,
+    actorId: options.actorId,
+    action: options.action,
+    resourceType: options.resourceType,
+    resourceId: options.resourceId,
+    before: options.before ?? null,
+    after: options.after ?? null,
+  });
+  const id = options.id ?? randomUUID();
+  const timestamp = options.now ?? new Date().toISOString();
+
+  const entity: AuditEvent = AuditEventSchema.parse({
+    id,
+    organizationId: parsedInput.organizationId,
+    actorId: parsedInput.actorId,
+    action: parsedInput.action,
+    resourceType: parsedInput.resourceType,
+    resourceId: parsedInput.resourceId,
+    before: parsedInput.before,
+    after: parsedInput.after,
+    createdAt: timestamp,
+  });
+
+  // Enforce runtime immutability
+  return Object.freeze(entity);
+}
+
+export interface AuditEventRepository {
+  create(input: CreateAuditEventInput, id?: string): Promise<AuditEvent>;
+  findById(id: string): Promise<AuditEvent | null>;
+  listByOrganization(organizationId: string): Promise<AuditEvent[]>;
+  listByResource(resourceType: string, resourceId: string): Promise<AuditEvent[]>;
+  listByActor(actorId: string): Promise<AuditEvent[]>;
+}
+
+/**
+ * In-memory AuditEvent Repository enforcing:
+ * 1. Global Audit Event ID uniqueness
+ * 2. STRICT APPEND-ONLY IMMUTABILITY (no update/delete operations)
+ * 3. Scoped listing by Organization, Resource, or Actor in chronological order
+ */
+export class InMemoryAuditEventRepository implements AuditEventRepository {
+  private events = new Map<string, AuditEvent>();
+  private orderedEventIds: string[] = [];
+
+  async create(input: CreateAuditEventInput, id?: string): Promise<AuditEvent> {
+    const eventId = id ?? randomUUID();
+    if (this.events.has(eventId)) {
+      throw new Error(`Audit Event with ID '${eventId}' already exists`);
+    }
+
+    const event = createAuditEvent({
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: input.action,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      before: input.before,
+      after: input.after,
+      id: eventId,
+    });
+
+    this.events.set(event.id, event);
+    this.orderedEventIds.push(event.id);
+    return event;
+  }
+
+  async findById(id: string): Promise<AuditEvent | null> {
+    return this.events.get(id) ?? null;
+  }
+
+  async listByOrganization(organizationId: string): Promise<AuditEvent[]> {
+    return this.orderedEventIds
+      .map((id) => this.events.get(id)!)
+      .filter((e) => e.organizationId === organizationId);
+  }
+
+  async listByResource(resourceType: string, resourceId: string): Promise<AuditEvent[]> {
+    return this.orderedEventIds
+      .map((id) => this.events.get(id)!)
+      .filter((e) => e.resourceType === resourceType && e.resourceId === resourceId);
+  }
+
+  async listByActor(actorId: string): Promise<AuditEvent[]> {
+    return this.orderedEventIds
+      .map((id) => this.events.get(id)!)
+      .filter((e) => e.actorId === actorId);
   }
 }

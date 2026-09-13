@@ -457,3 +457,58 @@ export type CreateConfigurationVersionInput = z.input<typeof CreateConfiguration
 export type CreateConfigurationVersionOutput = z.output<
   typeof CreateConfigurationVersionInputSchema
 >;
+
+// --- Audit Event Domain Model (Milestone 1.8) ---
+
+export const AuditEventIdSchema = z
+  .string()
+  .uuid({ message: 'Audit Event ID must be a valid UUID' });
+
+export const ActorIdSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'actorId cannot be empty' })
+  .max(255, { message: 'actorId cannot exceed 255 characters' });
+
+export const AuditActionSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'Action cannot be empty' })
+  .max(64, { message: 'Action cannot exceed 64 characters' });
+
+export const AuditResourceTypeSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'resourceType cannot be empty' })
+  .max(64, { message: 'resourceType cannot exceed 64 characters' });
+
+export const AuditResourceIdSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'resourceId cannot be empty' })
+  .max(255, { message: 'resourceId cannot exceed 255 characters' });
+
+export const AuditEventSchema = z.object({
+  id: AuditEventIdSchema,
+  organizationId: OrganizationIdSchema,
+  actorId: ActorIdSchema,
+  action: AuditActionSchema,
+  resourceType: AuditResourceTypeSchema,
+  resourceId: AuditResourceIdSchema,
+  before: z.record(z.unknown()).nullable(),
+  after: z.record(z.unknown()).nullable(),
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+});
+export type AuditEvent = z.infer<typeof AuditEventSchema>;
+
+export const CreateAuditEventInputSchema = z.object({
+  organizationId: OrganizationIdSchema,
+  actorId: ActorIdSchema,
+  action: AuditActionSchema,
+  resourceType: AuditResourceTypeSchema,
+  resourceId: AuditResourceIdSchema,
+  before: z.record(z.unknown()).nullable().default(null),
+  after: z.record(z.unknown()).nullable().default(null),
+});
+export type CreateAuditEventInput = z.input<typeof CreateAuditEventInputSchema>;
+export type CreateAuditEventOutput = z.output<typeof CreateAuditEventInputSchema>;

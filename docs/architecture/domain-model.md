@@ -351,3 +351,68 @@ interface ConfigurationVersion {
    - Every version computes a deterministic `SHA-256` checksum over its normalized configuration snapshot, guarding against corruption and tampering.
 4. **Optimistic Concurrency Control (OCC)**:
    - Modifications supply an expected `baseVersion`. If the environment's current version has advanced, the update is safely rejected with a conflict error.
+
+---
+
+## 9. Audit Event (Phase 1.8)
+
+### Responsibility
+
+The **Audit Event** entity represents an immutable, append-only governance and operational log entry capturing every state change, feature toggle, rollout modification, and configuration mutation within an Organization.
+
+### Relationship
+
+```text
+Organization (Tenant Root)
+  │
+  ├── Audit Events (Append-Only Governance Log)
+  │     ├── Event #1: CREATE_FEATURE_FLAG (new_checkout) by admin
+  │     ├── Event #2: UPDATE_ROLLOUT (before: 10%, after: 25%) by developer_123
+  │     └── Event #3: ROLLBACK_CONFIGURATION (v43 -> v44) by incident_responder
+```
+
+### Schema Definition
+
+```typescript
+interface AuditEvent {
+  id: string; // UUID v4 format
+  organizationId: string; // Parent Organization UUID v4
+  actorId: string; // User ID / Actor key who initiated action
+  action: string; // Operation action code (e.g., "UPDATE_ROLLOUT", "CREATE_FLAG")
+  resourceType: string; // Resource class (e.g., "FEATURE_FLAG", "ROLLOUT")
+  resourceId: string; // ID of targeted resource
+  before: Record<string, unknown> | null; // Previous state snapshot (null on creation)
+  after: Record<string, unknown> | null; // New state snapshot (null on deletion)
+  createdAt: string; // ISO 8601 UTC timestamp
+}
+```
+
+### Key Invariants & Governance Rules
+
+1. **Strict Append-Only Immutability**:
+   - Audit events are **permanent and immutable**. Once created, an audit event cannot be updated, edited, or deleted under any circumstance.
+2. **Comprehensive Differential Audit (Before & After)**:
+   - State mutations store structured differential payloads (`before` and `after`), enabling exact reconstruction of historical configurations.
+   - Resource creations record `before: null` and `after: { ... }`.
+   - Resource deletions record `before: { ... }` and `after: null`.
+3. **Tenant Root Scoping**:
+   - Every audit event is scoped strictly to an `organizationId`, preventing cross-tenant leakage.
+4. **Multi-Dimensional Indexing**:
+   - Audit logs support querying by Organization (`listByOrganization`), by Resource (`listByResource`), and by Actor (`listByActor`) in strict chronological order.
+
+---
+
+## 10. Milestone 1 Core Domain Model Completion Summary
+
+With Phase 1.8 complete, **Milestone 1 — Core Domain Model** is 100% defined, implemented, and verified across all layers:
+
+| Phase   | Domain Entity             | Primary Invariants & Capabilities                                                                         |
+| :------ | :------------------------ | :-------------------------------------------------------------------------------------------------------- |
+| **1.1** | **Organization**          | Tenant root, strict multi-tenant data isolation, global UUID uniqueness                                   |
+| **1.2** | **Project**               | Scoped application boundaries, unique slug keys `(organizationId, key)`                                   |
+| **1.3** | **Environment**           | Independent runtime tiers (`DEVELOPMENT`, `STAGING`, `PRODUCTION`, `CUSTOM`), configuration isolation     |
+| **1.4** | **Feature Flag**          | Typed flags (`BOOLEAN`, `STRING`, `NUMBER`, `JSON`), type-safe defaults, master kill switches             |
+| **1.5** | **Targeting Rule**        | Priority-ordered clauses ($0, 1, 2, \dots$), conjunctive condition evaluation (`AND`), rich operators     |
+| **1.6** | **Rollout**               | Bounded percentage $[0, 100]$, deterministic SHA-256 bucketing ($0 \to 9999$), monotonic cohort stability |
+| **1.7** | **Configuration Version** | Immutable point-in-time snapshots, deterministic SHA-256 checksums, non-destructive rollbacks             |
+| **1.8** | **Audit Event**           | Append-only governance trail, structured before/after diffs, actor attribution                            |
