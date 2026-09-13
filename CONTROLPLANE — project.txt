@@ -1,0 +1,5395 @@
+# CONTROLPLANE — COMPLETE PROJECT SPECIFICATION
+
+Project Name: CONTROLPLANE
+
+Category: Developer Infrastructure / Feature Management Platform
+
+Target Release: v1.0.0
+
+Status: Architecture and Development Specification
+
+---
+
+# 1. PROJECT OVERVIEW
+
+CONTROLPLANE is a developer-first, self-hostable feature management platform that allows engineering teams to control feature exposure without requiring a new application release.
+
+A developer ships feature code inside an application but keeps the feature controlled by a remotely managed configuration.
+
+The application uses a CONTROLPLANE SDK to retrieve and cache feature configuration.
+
+The SDK evaluates feature flags locally.
+
+This allows teams to:
+
+- Enable or disable features remotely
+- Release features to selected users
+- Target users based on attributes
+- Roll out features by percentage
+- Gradually increase feature exposure
+- Instantly disable problematic features
+- Roll back configuration changes
+- Continue operating during network failures
+- Avoid releasing a new application version for configuration-only changes
+
+CONTROLPLANE does not deploy application code.
+
+CONTROLPLANE controls whether already-deployed application functionality should be exposed or executed.
+
+---
+
+# 2. CORE PRODUCT STATEMENT
+
+> CONTROLPLANE is a developer-first feature delivery platform that separates feature deployment from feature release.
+
+A feature can be:
+
+```text
+DEPLOYED
+
+but
+
+NOT RELEASED
+```
+
+The feature code already exists inside the user's application.
+
+CONTROLPLANE decides:
+
+```text
+Should this feature be enabled?
+```
+
+This decision can change remotely.
+
+---
+
+# 3. THE CORE PROBLEM
+
+Traditional software delivery usually follows this process:
+
+```text
+Write Code
+
+↓
+
+Build Application
+
+↓
+
+Test Application
+
+↓
+
+Release Application
+
+↓
+
+Users Receive New Version
+```
+
+This tightly couples:
+
+```text
+CODE DEPLOYMENT
+
+and
+
+FEATURE RELEASE
+```
+
+That creates problems.
+
+For example:
+
+A developer deploys a new payment system.
+
+The code reaches production.
+
+However, the team may not want all users to receive the new payment system immediately.
+
+Without feature management, the developer may need to:
+
+```text
+Change Code
+
+↓
+
+Build Again
+
+↓
+
+Release Again
+
+↓
+
+Wait For Users To Update
+```
+
+CONTROLPLANE separates deployment from release.
+
+The new flow becomes:
+
+```text
+Ship Feature Code
+
+↓
+
+Feature Disabled
+
+↓
+
+Enable Remotely
+
+↓
+
+5% Users
+
+↓
+
+20% Users
+
+↓
+
+50% Users
+
+↓
+
+100% Users
+```
+
+If something fails:
+
+```text
+Problem Detected
+
+↓
+
+Disable Feature
+
+↓
+
+Configuration Updates
+
+↓
+
+Application Changes Behavior
+
+↓
+
+NO NEW APPLICATION RELEASE
+```
+
+---
+
+# 4. PRODUCT GOALS
+
+CONTROLPLANE v1.0.0 must provide:
+
+```text
+✓ Remote Feature Configuration
+
+✓ Boolean Feature Flags
+
+✓ Typed Configuration Values
+
+✓ User Targeting
+
+✓ Rule-Based Evaluation
+
+✓ Deterministic Percentage Rollouts
+
+✓ Progressive Rollouts
+
+✓ Immutable Configuration Versions
+
+✓ Configuration Rollback
+
+✓ Kill Switches
+
+✓ Local SDK Evaluation
+
+✓ Offline SDK Support
+
+✓ Last Known Good Configuration
+
+✓ Safe Defaults
+
+✓ Flutter SDK
+
+✓ JavaScript SDK
+
+✓ Node SDK Support
+
+✓ Organization Isolation
+
+✓ Authentication
+
+✓ RBAC
+
+✓ API Keys
+
+✓ Audit Logs
+
+✓ Dashboard
+
+✓ Self Hosting
+
+✓ Docker Support
+
+✓ Strong Automated Testing
+```
+
+---
+
+# 5. NON-GOALS FOR v1.0.0
+
+CONTROLPLANE v1.0.0 will NOT attempt to implement everything.
+
+The following features are intentionally excluded:
+
+```text
+NO Real-Time SSE Synchronization
+
+NO WebSocket Configuration Streaming
+
+NO Automatic Canary Analysis
+
+NO Machine Learning Rollouts
+
+NO Experiment Analytics Platform
+
+NO A/B Test Statistics
+
+NO Billing System
+
+NO Subscription Management
+
+NO Multi-Region Infrastructure
+
+NO Kubernetes Requirement
+
+NO Edge Network
+
+NO Plugin Marketplace
+
+NO Automatic Feature Cleanup
+
+NO AI Feature Generation
+```
+
+These may be considered after v1.0.0.
+
+The first release must prioritize:
+
+```text
+CORRECTNESS
+
+over
+
+FEATURE COUNT
+```
+
+---
+
+# 6. FUNDAMENTAL ARCHITECTURE
+
+CONTROLPLANE is divided into three major systems.
+
+```text
+CONTROL PLANE
+
+↓
+
+DATA PLANE
+
+↓
+
+SDK
+```
+
+Full architecture:
+
+```text
+                        USERS
+                          │
+                          │
+                          ▼
+
+                  MANAGEMENT DASHBOARD
+                          │
+                          ▼
+
+                    CONTROL API
+                          │
+                          │
+              ┌───────────┼───────────┐
+              │           │           │
+              ▼           ▼           ▼
+
+       AUTHORIZATION   SERVICES    AUDIT LOG
+
+                          │
+                          ▼
+
+                     POSTGRESQL
+
+                          │
+
+                    CONFIGURATION
+
+                          │
+                          ▼
+
+                  DISTRIBUTION API
+
+                          │
+             ┌────────────┼────────────┐
+             │            │            │
+             ▼            ▼            ▼
+
+        FLUTTER SDK   JAVASCRIPT SDK  NODE SDK
+
+             │            │            │
+             └────────────┼────────────┘
+                          │
+                          ▼
+
+                   LOCAL CACHE
+
+                          │
+                          ▼
+
+                 EVALUATION ENGINE
+
+                          │
+                          ▼
+
+                APPLICATION BEHAVIOR
+```
+
+---
+
+# 7. CONTROL PLANE
+
+The Control Plane manages feature configuration.
+
+It is responsible for:
+
+```text
+Organizations
+
+Projects
+
+Environments
+
+Users
+
+Roles
+
+Feature Flags
+
+Rules
+
+Rollouts
+
+Configuration Versions
+
+Rollback
+
+Kill Switches
+
+SDK Keys
+
+Audit Logs
+```
+
+The Control Plane should never be responsible for SDK-side feature evaluation.
+
+The Control Plane manages configuration.
+
+The SDK evaluates configuration.
+
+---
+
+# 8. DATA PLANE
+
+The Data Plane distributes configuration to SDKs.
+
+Responsibilities:
+
+```text
+SDK Authentication
+
+Configuration Retrieval
+
+Version Metadata
+
+ETags
+
+Conditional Requests
+
+Rate Limiting
+```
+
+The Data Plane should remain simple.
+
+It should not contain complex feature evaluation logic.
+
+---
+
+# 9. SDK
+
+The SDK is responsible for local application behavior.
+
+Responsibilities:
+
+```text
+Configuration Download
+
+Configuration Validation
+
+Local Cache
+
+Last Known Good Configuration
+
+Rule Evaluation
+
+Percentage Rollout
+
+Safe Defaults
+
+Offline Support
+```
+
+Critical principle:
+
+```text
+FEATURE EVALUATION
+
+SHOULD NOT REQUIRE
+
+A NETWORK REQUEST
+```
+
+Evaluation should happen locally.
+
+---
+
+# 10. WHY LOCAL EVALUATION
+
+A poor architecture would look like this:
+
+```text
+Application
+
+↓
+
+Network Request
+
+↓
+
+Server
+
+↓
+
+Feature Decision
+
+↓
+
+Application
+```
+
+Every feature evaluation would depend on:
+
+```text
+Network
+
+Server Availability
+
+Latency
+```
+
+CONTROLPLANE uses:
+
+```text
+Application
+
+↓
+
+CONTROLPLANE SDK
+
+↓
+
+LOCAL CONFIGURATION
+
+↓
+
+LOCAL EVALUATION
+
+↓
+
+RESULT
+```
+
+Benefits:
+
+```text
+Low Latency
+
+Offline Support
+
+Reduced Server Load
+
+Higher Reliability
+
+Predictable Performance
+```
+
+---
+
+# 11. CORE DOMAIN MODEL
+
+CONTROLPLANE uses the following hierarchy.
+
+```text
+Organization
+
+└── Project
+
+    ├── Development
+
+    ├── Staging
+
+    └── Production
+```
+
+Expanded:
+
+```text
+Organization
+
+│
+
+├── Users
+
+│
+
+├── Projects
+
+│   │
+│   ├── Project A
+│   │
+│   │   ├── Development
+│   │   │
+│   │   ├── Staging
+│   │   │
+│   │   └── Production
+│   │
+│   └── Project B
+│
+│
+└── Audit Events
+```
+
+---
+
+# 12. ORGANIZATION
+
+An Organization represents a tenant.
+
+Example:
+
+```text
+Acme Corporation
+```
+
+Properties:
+
+```text
+id
+
+name
+
+createdAt
+
+updatedAt
+```
+
+An organization owns:
+
+```text
+Projects
+
+Users
+
+Roles
+
+Audit Events
+```
+
+---
+
+# 13. PROJECT
+
+A Project represents an application or software product.
+
+Example:
+
+```text
+Mobile Application
+
+Web Application
+
+Backend API
+```
+
+Model:
+
+```text
+Project
+
+id
+
+organizationId
+
+name
+
+key
+
+createdAt
+
+updatedAt
+```
+
+Example:
+
+```text
+Name:
+
+Mobile Application
+
+
+Key:
+
+mobile-app
+```
+
+The project key must be stable.
+
+SDKs use project and environment information to retrieve configuration.
+
+---
+
+# 14. ENVIRONMENT
+
+A Project contains environments.
+
+Typical environments:
+
+```text
+development
+
+staging
+
+production
+```
+
+Example:
+
+```text
+Mobile Application
+
+│
+
+├── Development
+
+├── Staging
+
+└── Production
+```
+
+Each environment has independent configuration.
+
+This means:
+
+```text
+Development Configuration
+
+≠
+
+Production Configuration
+```
+
+Model:
+
+```text
+Environment
+
+id
+
+projectId
+
+name
+
+key
+
+type
+
+createdAt
+
+updatedAt
+```
+
+---
+
+# 15. FEATURE FLAG
+
+A Feature Flag represents remotely controlled application behavior.
+
+Example:
+
+```text
+new_checkout
+```
+
+Model:
+
+```text
+FeatureFlag
+
+id
+
+environmentId
+
+key
+
+name
+
+description
+
+type
+
+defaultValue
+
+enabled
+
+createdAt
+
+updatedAt
+```
+
+Example:
+
+```text
+Key:
+
+new_checkout
+
+
+Type:
+
+Boolean
+
+
+Default:
+
+false
+```
+
+---
+
+# 16. FLAG TYPES
+
+CONTROLPLANE v1.0.0 supports:
+
+```text
+Boolean
+
+String
+
+Number
+
+JSON
+```
+
+Examples:
+
+Boolean:
+
+```text
+new_checkout
+
+true
+```
+
+String:
+
+```text
+theme
+
+"dark"
+```
+
+Number:
+
+```text
+max_upload_size
+
+10
+```
+
+JSON:
+
+```json
+{
+  "layout": "modern",
+  "animation": true
+}
+```
+
+---
+
+# 17. FEATURE FLAG EVALUATION
+
+A feature flag evaluation receives:
+
+```text
+Flag Key
+
++
+
+Evaluation Context
+
++
+
+Configuration
+```
+
+Example:
+
+```text
+Flag:
+
+new_checkout
+```
+
+Context:
+
+```json
+{
+  "userId": "user_123",
+  "country": "IN",
+  "platform": "android"
+}
+```
+
+The system returns:
+
+```text
+true
+
+or
+
+false
+```
+
+For typed flags:
+
+```text
+String
+
+Number
+
+JSON
+```
+
+---
+
+# 18. EVALUATION CONTEXT
+
+The Evaluation Context describes the user or environment.
+
+Model:
+
+```text
+EvaluationContext
+
+userId
+
+anonymousId
+
+platform
+
+appVersion
+
+country
+
+language
+
+customAttributes
+```
+
+Example:
+
+```json
+{
+  "userId": "user_123",
+
+  "platform": "android",
+
+  "appVersion": "2.1.0",
+
+  "country": "IN",
+
+  "customAttributes": {
+    "plan": "premium",
+    "betaUser": true
+  }
+}
+```
+
+The SDK must support custom attributes.
+
+---
+
+# 19. EVALUATION RESULT
+
+The evaluation engine should return more than a raw value internally.
+
+Model:
+
+```text
+EvaluationResult
+
+flagKey
+
+value
+
+reason
+
+configurationVersion
+
+matchedRule
+```
+
+Example:
+
+```json
+{
+  "flagKey": "new_checkout",
+
+  "value": true,
+
+  "reason": "PERCENTAGE_ROLLOUT",
+
+  "configurationVersion": 42
+}
+```
+
+Evaluation reasons may include:
+
+```text
+DEFAULT
+
+FLAG_DISABLED
+
+TARGETING_RULE
+
+PERCENTAGE_ROLLOUT
+
+ROLLOUT_EXCLUDED
+
+UNKNOWN_FLAG
+
+ERROR
+```
+
+---
+
+# 20. EVALUATION PIPELINE
+
+Feature evaluation must follow a deterministic order.
+
+```text
+Evaluation Request
+
+↓
+
+Load Configuration
+
+↓
+
+Validate Configuration
+
+↓
+
+Find Flag
+
+↓
+
+Flag Exists?
+
+│
+
+├── NO
+
+│   ↓
+
+│
+
+│ Safe Default
+
+│
+
+└── YES
+
+     ↓
+
+Flag Enabled?
+
+│
+
+├── NO
+
+│   ↓
+
+│
+
+│ Default Value
+
+│
+
+└── YES
+
+     ↓
+
+Evaluate Rules
+
+     ↓
+
+Rule Matched?
+
+│
+
+├── YES
+
+│   ↓
+
+│
+
+│ Return Rule Value
+
+│
+
+└── NO
+
+     ↓
+
+Evaluate Percentage Rollout
+
+     ↓
+
+Return Result
+```
+
+This order must remain consistent across every SDK.
+
+---
+
+# 21. EVALUATION DETERMINISM
+
+The most important invariant is:
+
+```text
+Same Configuration
+
++
+
+Same Evaluation Context
+
+=
+
+Same Result
+```
+
+Always.
+
+There should be no randomness during evaluation.
+
+There should be no time-dependent behavior.
+
+There should be no network dependency.
+
+---
+
+# 22. RULE ENGINE
+
+Rules allow targeted feature exposure.
+
+Example:
+
+```text
+IF
+
+country == IN
+
+AND
+
+platform == android
+
+THEN
+
+ENABLE FEATURE
+```
+
+Rules are evaluated locally.
+
+---
+
+# 23. RULE STRUCTURE
+
+Conceptual rule:
+
+```text
+Rule
+
+priority
+
+conditions
+
+value
+
+enabled
+```
+
+Example:
+
+```json
+{
+  "priority": 1,
+
+  "conditions": {
+    "operator": "AND",
+
+    "conditions": [
+      {
+        "attribute": "country",
+
+        "operator": "equals",
+
+        "value": "IN"
+      },
+
+      {
+        "attribute": "platform",
+
+        "operator": "equals",
+
+        "value": "android"
+      }
+    ]
+  },
+
+  "value": true
+}
+```
+
+---
+
+# 24. RULE OPERATORS
+
+String operators:
+
+```text
+equals
+
+notEquals
+
+contains
+
+startsWith
+
+endsWith
+
+in
+
+notIn
+```
+
+Numeric operators:
+
+```text
+greaterThan
+
+greaterThanOrEqual
+
+lessThan
+
+lessThanOrEqual
+```
+
+Version operators:
+
+```text
+versionEquals
+
+versionGreaterThan
+
+versionGreaterThanOrEqual
+
+versionLessThan
+
+versionLessThanOrEqual
+```
+
+Existence operators:
+
+```text
+exists
+
+notExists
+```
+
+Logical operators:
+
+```text
+AND
+
+OR
+
+NOT
+```
+
+---
+
+# 25. RULE PRIORITY
+
+Rules are evaluated from highest priority to lowest priority.
+
+Example:
+
+```text
+Priority 1
+
+Internal Employees
+
+
+Priority 2
+
+Beta Users
+
+
+Priority 3
+
+Premium Users
+
+
+Priority 4
+
+Android Users
+
+
+Default Behavior
+```
+
+The first matching rule wins.
+
+This behavior must be documented and tested.
+
+---
+
+# 26. PERCENTAGE ROLLOUT
+
+Percentage rollout allows gradual feature exposure.
+
+Example:
+
+```text
+Feature:
+
+new_checkout
+
+
+Rollout:
+
+25%
+```
+
+Approximately 25% of eligible users should receive the feature.
+
+However, this must not be random.
+
+A user must remain stable.
+
+---
+
+# 27. THE WRONG PERCENTAGE ROLLOUT
+
+This is incorrect:
+
+```text
+Random Number
+
+↓
+
+If Random < 25
+
+Enable
+```
+
+The same user could receive:
+
+```text
+Request 1
+
+Enabled
+
+
+Request 2
+
+Disabled
+```
+
+This creates inconsistent behavior.
+
+---
+
+# 28. DETERMINISTIC PERCENTAGE ROLLOUT
+
+CONTROLPLANE uses deterministic hashing.
+
+Input:
+
+```text
+projectKey
+
++
+
+environmentKey
+
++
+
+flagKey
+
++
+
+userIdentifier
+
++
+
+rolloutSalt
+```
+
+Example:
+
+```text
+mobile-app
+
+:
+
+production
+
+:
+
+new_checkout
+
+:
+
+user_123
+
+:
+
+v1
+```
+
+This creates a canonical input.
+
+The canonical input is hashed.
+
+The hash produces a stable bucket.
+
+```text
+Canonical Input
+
+↓
+
+Hash
+
+↓
+
+Unsigned Integer
+
+↓
+
+Bucket
+```
+
+---
+
+# 29. ROLLOUT BUCKET SYSTEM
+
+CONTROLPLANE uses:
+
+```text
+0 → 9999
+```
+
+This provides:
+
+```text
+10,000 buckets
+```
+
+The smallest percentage unit is:
+
+```text
+0.01%
+```
+
+Example:
+
+```text
+Bucket:
+
+723
+
+
+Rollout:
+
+10%
+
+
+Threshold:
+
+1000
+
+
+723 < 1000
+
+
+RESULT:
+
+ENABLED
+```
+
+For 25%:
+
+```text
+Threshold:
+
+2500
+```
+
+For 50%:
+
+```text
+Threshold:
+
+5000
+```
+
+For 100%:
+
+```text
+Threshold:
+
+10000
+```
+
+---
+
+# 30. ROLLOUT STABILITY
+
+Suppose:
+
+```text
+5% Rollout
+```
+
+A user is included.
+
+The rollout changes:
+
+```text
+5%
+
+↓
+
+10%
+
+↓
+
+25%
+
+↓
+
+50%
+```
+
+The original user must remain included.
+
+This is achieved because the user's bucket remains constant.
+
+Only the threshold increases.
+
+```text
+User Bucket:
+
+423
+
+
+5% Threshold:
+
+500
+
+ENABLED
+
+
+25% Threshold:
+
+2500
+
+ENABLED
+
+
+50% Threshold:
+
+5000
+
+ENABLED
+```
+
+---
+
+# 31. CROSS-SDK HASH CONSISTENCY
+
+This is a critical requirement.
+
+The same input must produce the same result.
+
+```text
+Flutter SDK
+
+↓
+
+Bucket 423
+```
+
+Must equal:
+
+```text
+JavaScript SDK
+
+↓
+
+Bucket 423
+```
+
+And:
+
+```text
+Node SDK
+
+↓
+
+Bucket 423
+```
+
+CONTROLPLANE must define:
+
+- Exact canonical input format
+- Character encoding
+- Hash algorithm
+- Integer conversion
+- Bucket calculation
+
+This specification must never be ambiguous.
+
+---
+
+# 32. GOLDEN TEST VECTORS
+
+Golden vectors guarantee SDK compatibility.
+
+Example:
+
+```text
+INPUT
+
+Project:
+
+mobile-app
+
+
+Environment:
+
+production
+
+
+Flag:
+
+new_checkout
+
+
+User:
+
+user_123
+
+
+Salt:
+
+v1
+```
+
+Expected:
+
+```text
+Bucket:
+
+4237
+```
+
+Every SDK must pass this exact test.
+
+The golden vectors become a shared contract.
+
+---
+
+# 33. CONFIGURATION SNAPSHOT
+
+SDKs should not receive raw database records.
+
+The Control Plane generates a normalized configuration snapshot.
+
+Example:
+
+```json
+{
+  "schemaVersion": 1,
+
+  "projectKey": "mobile-app",
+
+  "environmentKey": "production",
+
+  "configurationVersion": 42,
+
+  "flags": []
+}
+```
+
+The snapshot is the SDK's source of truth.
+
+---
+
+# 34. CONFIGURATION SNAPSHOT PROPERTIES
+
+Every configuration snapshot contains:
+
+```text
+Schema Version
+
+Project
+
+Environment
+
+Configuration Version
+
+Flags
+
+Checksum
+```
+
+Example:
+
+```text
+Configuration
+
+v42
+```
+
+The SDK knows exactly which configuration it is using.
+
+---
+
+# 35. CONFIGURATION VERSIONING
+
+Configuration is versioned.
+
+Example:
+
+```text
+v1
+
+↓
+
+v2
+
+↓
+
+v3
+
+↓
+
+v4
+```
+
+Every configuration change creates a new version.
+
+Examples:
+
+```text
+Create Flag
+
+↓
+
+New Version
+```
+
+```text
+Change Rule
+
+↓
+
+New Version
+```
+
+```text
+Change Rollout
+
+↓
+
+New Version
+```
+
+```text
+Disable Feature
+
+↓
+
+New Version
+```
+
+History is never overwritten.
+
+---
+
+# 36. IMMUTABLE CONFIGURATION
+
+Configuration versions must be immutable.
+
+This is not allowed:
+
+```text
+v42
+
+↓
+
+Modify v42
+```
+
+Instead:
+
+```text
+v42
+
+↓
+
+Create v43
+```
+
+This creates reliable history.
+
+---
+
+# 37. CONFIGURATION VERSION METADATA
+
+Every version stores:
+
+```text
+Version
+
+Actor
+
+Timestamp
+
+Reason
+
+Checksum
+
+Parent Version
+```
+
+Example:
+
+```text
+Version:
+
+43
+
+
+Actor:
+
+developer_123
+
+
+Reason:
+
+Increase rollout from 10% to 25%
+
+
+Parent:
+
+42
+```
+
+---
+
+# 38. OPTIMISTIC CONCURRENCY
+
+Multiple developers may modify configuration simultaneously.
+
+Example:
+
+```text
+Developer A
+
+loads:
+
+v42
+```
+
+Developer B also loads:
+
+```text
+v42
+```
+
+Developer A saves:
+
+```text
+v43
+```
+
+Developer B attempts to save based on:
+
+```text
+v42
+```
+
+The system detects:
+
+```text
+EXPECTED VERSION:
+
+42
+
+
+ACTUAL VERSION:
+
+43
+```
+
+Result:
+
+```text
+CONFLICT
+```
+
+Developer B must reload before applying changes.
+
+This prevents accidental lost updates.
+
+---
+
+# 39. CONFIGURATION CHECKSUM
+
+Every configuration snapshot should have a checksum.
+
+Conceptually:
+
+```text
+Normalized Configuration
+
+↓
+
+Hash
+
+↓
+
+Checksum
+```
+
+The checksum helps detect:
+
+```text
+Corruption
+
+Unexpected Changes
+
+Integrity Problems
+```
+
+---
+
+# 40. CONFIGURATION LIFECYCLE
+
+A configuration change follows:
+
+```text
+Developer Action
+
+↓
+
+Validation
+
+↓
+
+Authorization
+
+↓
+
+Domain Update
+
+↓
+
+Generate Snapshot
+
+↓
+
+Validate Snapshot
+
+↓
+
+Calculate Checksum
+
+↓
+
+Create Immutable Version
+
+↓
+
+Create Audit Event
+
+↓
+
+Publish New Configuration
+```
+
+These operations must use appropriate transaction boundaries.
+
+---
+
+# 41. CONFIGURATION ROLLBACK
+
+Rollback restores previous configuration behavior.
+
+Suppose history is:
+
+```text
+v41
+
+v42
+
+v43 ← Current
+```
+
+The team wants to restore:
+
+```text
+v41
+```
+
+The wrong approach:
+
+```text
+Current Version = v41
+```
+
+The correct approach:
+
+```text
+Create v44
+
+containing
+
+the configuration from v41
+```
+
+History becomes:
+
+```text
+v41
+
+v42
+
+v43
+
+v44 ← Restored Configuration From v41
+```
+
+History remains complete.
+
+---
+
+# 42. ROLLBACK AUDITABILITY
+
+Rollback must record:
+
+```text
+Who
+
+performed rollback
+
+
+From Version
+
+v43
+
+
+To Configuration
+
+v41
+
+
+Result Version
+
+v44
+
+
+Timestamp
+
+Reason
+```
+
+---
+
+# 43. KILL SWITCH
+
+A Kill Switch is an emergency mechanism.
+
+Example:
+
+```text
+payment_v2
+
+ACTIVE
+```
+
+A critical issue is discovered.
+
+The team performs:
+
+```text
+EMERGENCY DISABLE
+```
+
+CONTROLPLANE creates a new configuration version.
+
+SDKs synchronize.
+
+The feature becomes disabled.
+
+No application release is required.
+
+---
+
+# 44. PROGRESSIVE ROLLOUT
+
+Progressive rollout allows controlled exposure.
+
+Example:
+
+```text
+0%
+
+↓
+
+5%
+
+↓
+
+10%
+
+↓
+
+25%
+
+↓
+
+50%
+
+↓
+
+100%
+```
+
+v1.0.0 initially supports manual progression.
+
+Example:
+
+```text
+Developer
+
+↓
+
+Changes
+
+5%
+
+to
+
+10%
+```
+
+Automatic progression is not required for v1.0.0.
+
+---
+
+# 45. ROLLOUT STATES
+
+A rollout may have states.
+
+```text
+DRAFT
+
+ACTIVE
+
+PAUSED
+
+COMPLETED
+
+STOPPED
+
+ROLLED_BACK
+```
+
+State transitions must be validated.
+
+Example:
+
+```text
+DRAFT
+
+↓
+
+ACTIVE
+
+↓
+
+PAUSED
+
+↓
+
+ACTIVE
+
+↓
+
+COMPLETED
+```
+
+Invalid transitions should be rejected.
+
+---
+
+# 46. DISTRIBUTION API
+
+SDKs retrieve configuration through the Distribution API.
+
+Example:
+
+```text
+SDK
+
+↓
+
+GET CONFIGURATION
+
+↓
+
+Distribution API
+
+↓
+
+Authentication
+
+↓
+
+Environment Validation
+
+↓
+
+Return Snapshot
+```
+
+The Distribution API should not expose management functionality.
+
+---
+
+# 47. MANAGEMENT API VS SDK API
+
+These must be separated.
+
+Management API:
+
+```text
+Create Flags
+
+Update Flags
+
+Change Rollouts
+
+Rollback
+
+Manage Users
+```
+
+SDK API:
+
+```text
+Read Configuration
+```
+
+SDK credentials must not have management privileges.
+
+---
+
+# 48. API KEYS
+
+CONTROLPLANE uses separate credential categories.
+
+```text
+Management Credentials
+
+≠
+
+SDK Credentials
+```
+
+SDK credentials should be scoped.
+
+Example:
+
+```text
+Organization
+
+↓
+
+Project
+
+↓
+
+Environment
+```
+
+A production SDK key should not access unrelated environments.
+
+---
+
+# 49. SDK KEY SECURITY
+
+SDK keys should support:
+
+```text
+Create
+
+List Metadata
+
+Rotate
+
+Revoke
+```
+
+Sensitive secret values should not be unnecessarily exposed.
+
+Secrets must never appear in:
+
+```text
+Logs
+
+Error Messages
+
+Audit Payloads
+```
+
+---
+
+# 50. CONDITIONAL REQUESTS
+
+The Distribution API should support ETags.
+
+SDK sends:
+
+```text
+If-None-Match:
+
+"configuration-etag"
+```
+
+Server determines whether configuration changed.
+
+If unchanged:
+
+```text
+304 Not Modified
+```
+
+If changed:
+
+```text
+200 OK
+
++
+
+New Configuration
+```
+
+This reduces:
+
+```text
+Bandwidth
+
+Server Processing
+
+Unnecessary Data Transfer
+```
+
+---
+
+# 51. SDK ARCHITECTURE
+
+SDK architecture should separate responsibilities.
+
+```text
+CONTROLPLANE SDK
+
+│
+
+├── SDK Client
+
+├── Configuration Client
+
+├── Configuration Store
+
+├── Cache
+
+├── Evaluation Engine
+
+├── Rule Engine
+
+├── Rollout Engine
+
+└── Lifecycle Manager
+```
+
+---
+
+# 52. SDK INITIALIZATION
+
+SDK lifecycle:
+
+```text
+APPLICATION START
+
+↓
+
+SDK INITIALIZE
+
+↓
+
+Load Cached Configuration
+
+↓
+
+Validate Cache
+
+↓
+
+Cache Available?
+
+│
+
+├── YES
+
+│   ↓
+
+│
+
+│ Activate Cache
+
+│
+
+└── NO
+
+    ↓
+
+    Use Safe Defaults
+
+
+↓
+
+Attempt Remote Synchronization
+```
+
+The application should not depend on successful synchronization to begin functioning.
+
+---
+
+# 53. LAST KNOWN GOOD CONFIGURATION
+
+The SDK stores:
+
+```text
+Last Valid Configuration
+```
+
+This is called the:
+
+```text
+Last Known Good Configuration
+```
+
+The SDK must never replace valid configuration with invalid configuration.
+
+---
+
+# 54. SAFE CONFIGURATION ACTIVATION
+
+Configuration updates follow:
+
+```text
+Download Configuration
+
+↓
+
+Validate Schema
+
+↓
+
+Validate Integrity
+
+↓
+
+Validate Version
+
+↓
+
+Temporary Storage
+
+↓
+
+Atomic Replacement
+
+↓
+
+Activate Configuration
+```
+
+The active configuration must never become partially written.
+
+---
+
+# 55. OFFLINE SUPPORT
+
+Scenario:
+
+```text
+Application Starts
+
+↓
+
+Internet Unavailable
+```
+
+SDK behavior:
+
+```text
+Load Cached Configuration
+
+↓
+
+Evaluate Locally
+```
+
+The application continues operating.
+
+---
+
+# 56. NO CACHE + OFFLINE
+
+Scenario:
+
+```text
+Application Starts
+
++
+
+Internet Unavailable
+
++
+
+No Cached Configuration
+```
+
+SDK behavior:
+
+```text
+Use Safe Defaults
+```
+
+The application must not crash.
+
+---
+
+# 57. INVALID REMOTE CONFIGURATION
+
+Scenario:
+
+```text
+Server Responds
+
+with
+
+Invalid Configuration
+```
+
+SDK behavior:
+
+```text
+Reject Configuration
+
+↓
+
+Keep Existing Valid Configuration
+```
+
+Never:
+
+```text
+Invalid Remote Configuration
+
+↓
+
+Replace Working Configuration
+```
+
+---
+
+# 58. SAFE DEFAULTS
+
+Every SDK API should support safe fallback behavior.
+
+Example:
+
+```text
+isEnabled(
+
+  "new_checkout",
+
+  defaultValue: false
+
+)
+```
+
+If the flag cannot be evaluated:
+
+```text
+false
+```
+
+is returned.
+
+Unknown flags must not crash the application.
+
+---
+
+# 59. FLUTTER SDK
+
+The first mobile SDK is:
+
+```text
+controlplane_flutter
+```
+
+Responsibilities:
+
+```text
+Initialization
+
+Remote Synchronization
+
+Persistent Cache
+
+Local Evaluation
+
+Typed Evaluation
+
+Offline Support
+```
+
+---
+
+# 60. FLUTTER SDK API
+
+Example initialization:
+
+```dart
+await ControlPlane.initialize(
+  apiKey: "SDK_KEY",
+);
+```
+
+Boolean evaluation:
+
+```dart
+final enabled =
+    ControlPlane.isEnabled(
+      "new_checkout",
+      context: context,
+      defaultValue: false,
+    );
+```
+
+String evaluation:
+
+```dart
+final theme =
+    ControlPlane.getString(
+      "theme",
+      defaultValue: "light",
+    );
+```
+
+Number evaluation:
+
+```dart
+final limit =
+    ControlPlane.getNumber(
+      "upload_limit",
+      defaultValue: 10,
+    );
+```
+
+JSON evaluation:
+
+```dart
+final config =
+    ControlPlane.getJson(
+      "ui_configuration",
+    );
+```
+
+---
+
+# 61. JAVASCRIPT SDK
+
+The JavaScript SDK supports:
+
+```text
+Web Applications
+
+Browser Applications
+```
+
+Package concept:
+
+```text
+@controlplane/sdk
+```
+
+Example:
+
+```typescript
+const controlplane =
+  await ControlPlane.initialize({
+    apiKey: "SDK_KEY"
+  });
+```
+
+Evaluation:
+
+```typescript
+const enabled =
+  controlplane.isEnabled(
+    "new_checkout",
+    context,
+    false
+  );
+```
+
+---
+
+# 62. NODE SDK
+
+Node applications can use:
+
+```text
+@controlplane/sdk
+```
+
+or a dedicated package later.
+
+Potential use cases:
+
+```text
+Backend Services
+
+Express Applications
+
+Fastify Applications
+
+Microservices
+```
+
+The evaluation contract must remain identical.
+
+---
+
+# 63. CROSS-SDK COMPATIBILITY
+
+The following must always be true:
+
+```text
+Configuration X
+
++
+
+Context Y
+```
+
+Produces:
+
+```text
+Flutter
+
+=
+
+JavaScript
+
+=
+
+Node
+```
+
+This is enforced using:
+
+```text
+Shared Golden Test Vectors
+```
+
+---
+
+# 64. AUTHENTICATION
+
+The management platform requires user authentication.
+
+Protected resources include:
+
+```text
+Organizations
+
+Projects
+
+Environments
+
+Feature Flags
+
+Rollouts
+
+Versions
+
+API Keys
+```
+
+Authentication must occur before authorization.
+
+```text
+Request
+
+↓
+
+Authentication
+
+↓
+
+Identity
+
+↓
+
+Authorization
+
+↓
+
+Resource Access
+```
+
+---
+
+# 65. ROLE BASED ACCESS CONTROL
+
+CONTROLPLANE v1.0.0 includes:
+
+```text
+Owner
+
+Admin
+
+Developer
+
+Viewer
+```
+
+Example responsibilities:
+
+Owner:
+
+```text
+Full Organization Control
+```
+
+Admin:
+
+```text
+Project And Environment Management
+```
+
+Developer:
+
+```text
+Feature Configuration Management
+```
+
+Viewer:
+
+```text
+Read Only Access
+```
+
+---
+
+# 66. AUTHORIZATION
+
+Authorization must not exist only in the dashboard.
+
+The backend must enforce permissions.
+
+Never:
+
+```text
+Hide Button
+
+=
+
+Secure Feature
+```
+
+Instead:
+
+```text
+UI Restriction
+
++
+
+Backend Authorization
+```
+
+---
+
+# 67. TENANT ISOLATION
+
+This is a critical security invariant.
+
+```text
+Organization A
+
+CANNOT
+
+access
+
+Organization B
+```
+
+Every resource lookup must enforce ownership boundaries.
+
+Tests must attempt:
+
+```text
+Organization A
+
+↓
+
+Access Project B
+```
+
+Expected:
+
+```text
+DENIED
+```
+
+---
+
+# 68. AUDIT LOG
+
+Production configuration changes must be traceable.
+
+Events include:
+
+```text
+Organization Created
+
+Project Created
+
+Environment Created
+
+Flag Created
+
+Flag Updated
+
+Flag Disabled
+
+Rule Changed
+
+Rollout Changed
+
+Configuration Rolled Back
+
+Kill Switch Activated
+
+SDK Key Created
+
+SDK Key Revoked
+```
+
+---
+
+# 69. AUDIT EVENT
+
+Model:
+
+```text
+AuditEvent
+
+id
+
+organizationId
+
+actorId
+
+action
+
+resourceType
+
+resourceId
+
+before
+
+after
+
+timestamp
+```
+
+Example:
+
+```text
+Actor:
+
+developer_123
+
+
+Action:
+
+UPDATE_ROLLOUT
+
+
+Before:
+
+10%
+
+
+After:
+
+25%
+```
+
+---
+
+# 70. AUDIT LOG IMMUTABILITY
+
+Audit logs should be:
+
+```text
+APPEND ONLY
+```
+
+Existing audit events should not be edited.
+
+---
+
+# 71. DATABASE
+
+Recommended database:
+
+```text
+PostgreSQL
+```
+
+Reasons:
+
+```text
+Relational Integrity
+
+Transactions
+
+Indexes
+
+JSON Support
+
+Mature Tooling
+
+Strong Reliability
+```
+
+---
+
+# 72. CORE DATABASE ENTITIES
+
+```text
+organizations
+
+users
+
+organization_members
+
+projects
+
+environments
+
+feature_flags
+
+targeting_rules
+
+rollouts
+
+configuration_versions
+
+audit_events
+
+api_keys
+```
+
+---
+
+# 73. DATABASE RELATIONSHIPS
+
+```text
+Organization
+
+│
+
+├── Members
+
+│
+
+├── Projects
+
+│   │
+│   ├── Environments
+│   │   │
+│   │   ├── Feature Flags
+│   │   │
+│   │   ├── Rules
+│   │   │
+│   │   ├── Rollouts
+│   │   │
+│   │   └── Configuration Versions
+│
+│
+└── Audit Events
+```
+
+---
+
+# 74. DATABASE TRANSACTIONS
+
+Important operations should be transactional.
+
+Example:
+
+```text
+Update Feature
+
+↓
+
+Update Domain State
+
+↓
+
+Generate Configuration
+
+↓
+
+Create Version
+
+↓
+
+Create Audit Event
+
+↓
+
+Commit
+```
+
+If one critical step fails:
+
+```text
+ROLLBACK
+```
+
+---
+
+# 75. REPOSITORY ARCHITECTURE
+
+CONTROLPLANE uses a monorepo.
+
+Recommended structure:
+
+```text
+controlplane/
+
+├── apps/
+│
+│   ├── dashboard/
+│   │
+│   ├── control-api/
+│   │
+│   └── distribution-api/
+│
+├── packages/
+│
+│   ├── contracts/
+│   │
+│   ├── config-model/
+│   │
+│   ├── evaluation-engine/
+│   │
+│   ├── rule-engine/
+│   │
+│   ├── rollout-engine/
+│   │
+│   ├── hashing/
+│   │
+│   └── config-client/
+│
+├── sdks/
+│
+│   ├── javascript/
+│   │
+│   └── flutter/
+│
+├── tests/
+│
+│   ├── integration/
+│   │
+│   ├── contract/
+│   │
+│   ├── compatibility/
+│   │
+│   └── load/
+│
+├── infrastructure/
+│
+│   ├── docker/
+│   │
+│   ├── database/
+│   │
+│   └── deployment/
+│
+├── docs/
+│
+│   ├── architecture/
+│   │
+│   ├── adr/
+│   │
+│   ├── api/
+│   │
+│   ├── sdk/
+│   │
+│   └── operations/
+│
+├── scripts/
+│
+├── project.txt
+│
+├── phase.txt
+│
+├── README.md
+│
+├── CONTRIBUTING.md
+│
+├── SECURITY.md
+│
+└── LICENSE
+```
+
+---
+
+# 76. PACKAGE RESPONSIBILITIES
+
+## contracts
+
+Contains:
+
+```text
+API Contracts
+
+Configuration Contracts
+
+Shared Types
+
+Validation Schemas
+```
+
+---
+
+## config-model
+
+Contains:
+
+```text
+Configuration Structures
+
+Flag Models
+
+Rule Models
+
+Rollout Models
+```
+
+---
+
+## evaluation-engine
+
+Contains:
+
+```text
+Feature Evaluation Pipeline
+```
+
+---
+
+## rule-engine
+
+Contains:
+
+```text
+Condition Evaluation
+
+Operators
+
+Logical Evaluation
+```
+
+---
+
+## rollout-engine
+
+Contains:
+
+```text
+Percentage Rollout Logic
+
+Bucket Comparison
+```
+
+---
+
+## hashing
+
+Contains:
+
+```text
+Canonical Input
+
+Hashing
+
+Integer Conversion
+
+Bucket Calculation
+```
+
+---
+
+# 77. API ARCHITECTURE
+
+The API is divided into:
+
+```text
+Management API
+
+Distribution API
+```
+
+Management API:
+
+```text
+/api/v1/...
+```
+
+SDK API:
+
+```text
+/sdk/v1/...
+```
+
+These have different responsibilities and authentication.
+
+---
+
+# 78. MANAGEMENT API
+
+Management API resources:
+
+```text
+Organizations
+
+Projects
+
+Environments
+
+Flags
+
+Rules
+
+Rollouts
+
+Versions
+
+Rollback
+
+Users
+
+Roles
+
+API Keys
+
+Audit Logs
+```
+
+---
+
+# 79. API DESIGN PRINCIPLES
+
+APIs should provide:
+
+```text
+Consistent Naming
+
+Strong Validation
+
+Predictable Errors
+
+Appropriate HTTP Status Codes
+
+Pagination
+
+Request IDs
+```
+
+Error responses should be structured.
+
+Example:
+
+```json
+{
+  "error": {
+    "code": "VERSION_CONFLICT",
+    "message": "Configuration version is outdated",
+    "requestId": "req_123"
+  }
+}
+```
+
+---
+
+# 80. CONFIGURATION DISTRIBUTION
+
+SDK request:
+
+```text
+GET
+
+/sdk/v1/config
+```
+
+The SDK sends:
+
+```text
+Authorization
+
+SDK API Key
+
+If-None-Match
+```
+
+Server validates:
+
+```text
+SDK Key
+
+↓
+
+Project Scope
+
+↓
+
+Environment Scope
+
+↓
+
+Return Configuration
+```
+
+---
+
+# 81. DASHBOARD
+
+The dashboard is the management interface.
+
+The dashboard is not the source of truth.
+
+The API and database are the source of truth.
+
+Dashboard responsibilities:
+
+```text
+Visualization
+
+Configuration Management
+
+Version Inspection
+
+Rollout Control
+
+Audit Inspection
+```
+
+---
+
+# 82. DASHBOARD PAGES
+
+v1.0.0 includes:
+
+```text
+Login
+
+Organizations
+
+Projects
+
+Environments
+
+Feature Flags
+
+Flag Details
+
+Rule Editor
+
+Rollout Editor
+
+Version History
+
+Rollback
+
+API Keys
+
+Audit Logs
+```
+
+---
+
+# 83. FEATURE FLAG LIST
+
+Display:
+
+```text
+Flag Key
+
+Name
+
+Type
+
+Status
+
+Current Rollout
+
+Last Updated
+```
+
+Example:
+
+```text
+new_checkout
+
+Boolean
+
+Enabled
+
+25%
+
+Updated 2 Minutes Ago
+```
+
+---
+
+# 84. FLAG EDITOR
+
+The user can:
+
+```text
+Enable
+
+Disable
+
+Change Default Value
+
+Add Rules
+
+Modify Rules
+
+Change Rollout
+```
+
+Every meaningful change creates a new configuration version.
+
+---
+
+# 85. RULE BUILDER
+
+The rule builder represents:
+
+```text
+ATTRIBUTE
+
++
+
+OPERATOR
+
++
+
+VALUE
+```
+
+Example:
+
+```text
+country
+
+equals
+
+IN
+```
+
+Complex rules can use:
+
+```text
+AND
+
+OR
+
+NOT
+```
+
+The UI must not define rule semantics.
+
+Rule semantics belong to the backend and shared contract.
+
+---
+
+# 86. ROLLOUT INTERFACE
+
+The rollout interface supports:
+
+```text
+0%
+
+5%
+
+10%
+
+25%
+
+50%
+
+100%
+```
+
+It may also allow custom percentages.
+
+Before applying a production change, the UI should clearly show:
+
+```text
+Current:
+
+10%
+
+
+New:
+
+25%
+```
+
+---
+
+# 87. VERSION HISTORY
+
+Display:
+
+```text
+Version
+
+Actor
+
+Time
+
+Reason
+
+Changes
+```
+
+Example:
+
+```text
+v43
+
+Developer A
+
+10:30 AM
+
+Rollout:
+
+10% → 25%
+```
+
+---
+
+# 88. ROLLBACK INTERFACE
+
+Flow:
+
+```text
+Select Previous Version
+
+↓
+
+Inspect Configuration
+
+↓
+
+Review Difference
+
+↓
+
+Confirm
+
+↓
+
+Create Restored Version
+```
+
+Rollback should never silently overwrite history.
+
+---
+
+# 89. API KEY MANAGEMENT
+
+Dashboard supports:
+
+```text
+Create SDK Key
+
+View Key Metadata
+
+Rotate Key
+
+Revoke Key
+```
+
+The secret value should be displayed only when appropriate.
+
+---
+
+# 90. OBSERVABILITY
+
+CONTROLPLANE should be observable.
+
+Three categories:
+
+```text
+Logs
+
+Metrics
+
+Diagnostics
+```
+
+---
+
+# 91. STRUCTURED LOGGING
+
+Every significant request should contain:
+
+```text
+Timestamp
+
+Request ID
+
+Service
+
+Operation
+
+Status
+
+Duration
+```
+
+Example:
+
+```text
+requestId:
+
+req_123
+
+
+service:
+
+distribution-api
+
+
+operation:
+
+GET_CONFIG
+
+
+status:
+
+200
+```
+
+---
+
+# 92. METRICS
+
+Potential metrics:
+
+```text
+API Request Count
+
+API Error Count
+
+Request Duration
+
+Configuration Requests
+
+304 Responses
+
+Configuration Versions
+
+SDK Synchronization Failures
+```
+
+---
+
+# 93. SDK DIAGNOSTICS
+
+SDK diagnostic information may include:
+
+```text
+Current Configuration Version
+
+Last Successful Sync
+
+Cache Status
+
+Last Synchronization Error
+```
+
+Diagnostics should never expose secrets.
+
+---
+
+# 94. FAILURE SCENARIOS
+
+CONTROLPLANE must be designed around failure.
+
+The important question is not:
+
+```text
+Does It Work?
+```
+
+It is:
+
+```text
+What Happens When It Fails?
+```
+
+---
+
+# 95. DISTRIBUTION SERVER FAILURE
+
+Scenario:
+
+```text
+Distribution API
+
+OFFLINE
+```
+
+Expected SDK behavior:
+
+```text
+Use Last Known Good Configuration
+```
+
+Feature evaluation continues locally.
+
+---
+
+# 96. NETWORK FAILURE
+
+Scenario:
+
+```text
+Internet
+
+OFFLINE
+```
+
+Expected:
+
+```text
+Use Cached Configuration
+```
+
+No feature evaluation should require network access.
+
+---
+
+# 97. INVALID CONFIGURATION
+
+Scenario:
+
+```text
+Remote Configuration
+
+INVALID
+```
+
+Expected:
+
+```text
+Reject New Configuration
+
+↓
+
+Keep Existing Valid Configuration
+```
+
+---
+
+# 98. CACHE CORRUPTION
+
+Scenario:
+
+```text
+Cached Configuration
+
+CORRUPTED
+```
+
+Expected:
+
+```text
+Reject Cache
+
+↓
+
+Attempt Remote Synchronization
+
+↓
+
+If Unavailable
+
+↓
+
+Safe Defaults
+```
+
+---
+
+# 99. UNKNOWN FLAG
+
+Scenario:
+
+```text
+isEnabled(
+
+"unknown_flag"
+)
+```
+
+Expected:
+
+```text
+Safe Default
+```
+
+No application crash.
+
+---
+
+# 100. CONCURRENT CONFIGURATION UPDATE
+
+Scenario:
+
+```text
+Developer A
+
+and
+
+Developer B
+```
+
+modify the same environment.
+
+Expected:
+
+```text
+Optimistic Concurrency
+
+↓
+
+Conflict Detection
+```
+
+---
+
+# 101. TESTING PHILOSOPHY
+
+CONTROLPLANE must have multiple testing layers.
+
+```text
+Unit Tests
+
+↓
+
+Integration Tests
+
+↓
+
+Contract Tests
+
+↓
+
+Compatibility Tests
+
+↓
+
+Failure Tests
+
+↓
+
+Load Tests
+```
+
+---
+
+# 102. UNIT TESTING
+
+Test individual components.
+
+Examples:
+
+```text
+Rule Operators
+
+Hashing
+
+Bucket Calculation
+
+Evaluation Pipeline
+
+Version Comparison
+
+Configuration Validation
+```
+
+---
+
+# 103. INTEGRATION TESTING
+
+Test component interaction.
+
+Examples:
+
+```text
+API
+
++
+
+Database
+```
+
+```text
+Configuration Update
+
++
+
+Version Creation
+
++
+
+Audit Event
+```
+
+---
+
+# 104. CONTRACT TESTING
+
+Configuration contracts are critical.
+
+Test:
+
+```text
+Valid Configuration
+
+Invalid Configuration
+
+Missing Fields
+
+Invalid Rule
+
+Invalid Rollout
+```
+
+All SDKs must interpret the contract correctly.
+
+---
+
+# 105. CROSS-SDK COMPATIBILITY TESTING
+
+For every shared test:
+
+```text
+Configuration
+
++
+
+Context
+```
+
+Expected:
+
+```text
+Flutter Result
+
+=
+
+JavaScript Result
+```
+
+This includes:
+
+```text
+Rules
+
+Hashing
+
+Rollouts
+
+Typed Values
+
+Defaults
+```
+
+---
+
+# 106. FAILURE TESTING
+
+Explicitly test:
+
+```text
+Network Failure
+
+Server Failure
+
+Invalid Response
+
+Cache Corruption
+
+Unknown Flag
+
+Missing Context
+
+Concurrent Updates
+```
+
+---
+
+# 107. LOAD TESTING
+
+Test:
+
+```text
+Concurrent SDK Requests
+
+Distribution API Load
+
+Management API Load
+```
+
+Measure:
+
+```text
+p50
+
+p95
+
+p99
+```
+
+Performance claims must be based on measured results.
+
+---
+
+# 108. SECURITY MODEL
+
+Security boundaries include:
+
+```text
+User
+
+↓
+
+Organization
+
+↓
+
+Project
+
+↓
+
+Environment
+
+↓
+
+Resource
+```
+
+Every request must respect these boundaries.
+
+---
+
+# 109. SECURITY PRINCIPLES
+
+```text
+Least Privilege
+
+Tenant Isolation
+
+Input Validation
+
+Secret Protection
+
+Secure Authentication
+
+Authorization Enforcement
+
+Auditability
+```
+
+---
+
+# 110. INPUT VALIDATION
+
+Validate:
+
+```text
+API Requests
+
+Feature Keys
+
+Rule Structures
+
+Operators
+
+Values
+
+Percentages
+
+Configuration Schemas
+```
+
+Never trust dashboard input.
+
+Never trust SDK input.
+
+---
+
+# 111. SECRET PROTECTION
+
+Never expose secrets in:
+
+```text
+Logs
+
+Error Responses
+
+Audit Events
+
+Client-Side Bundles
+```
+
+Secrets should be handled carefully.
+
+---
+
+# 112. DEPENDENCY SECURITY
+
+CI should include dependency checks.
+
+The project should monitor:
+
+```text
+Known Vulnerabilities
+
+Outdated Dependencies
+```
+
+---
+
+# 113. THREAT MODEL
+
+A formal threat model should document:
+
+```text
+Assets
+
+Trust Boundaries
+
+Attackers
+
+Threats
+
+Mitigations
+```
+
+Assets include:
+
+```text
+Configuration
+
+API Keys
+
+User Sessions
+
+Organization Data
+```
+
+---
+
+# 114. TECHNOLOGY STACK
+
+The recommended architecture for v1.0.0:
+
+Backend:
+
+```text
+TypeScript
+
+Node.js
+```
+
+Management API:
+
+```text
+Fastify
+
+or
+
+Express
+```
+
+Recommended preference:
+
+```text
+Fastify
+```
+
+because of:
+
+```text
+Schema Validation
+
+Performance
+
+TypeScript Ecosystem
+```
+
+Database:
+
+```text
+PostgreSQL
+```
+
+Dashboard:
+
+```text
+Next.js
+
+TypeScript
+```
+
+Styling:
+
+```text
+Tailwind CSS
+```
+
+Validation:
+
+```text
+Zod
+```
+
+ORM:
+
+```text
+Prisma
+
+or
+
+Drizzle
+```
+
+Preferred decision should be documented before implementation.
+
+Testing:
+
+```text
+Vitest
+```
+
+Integration testing:
+
+```text
+Testcontainers
+
+or
+
+Dedicated Test Database
+```
+
+Monorepo:
+
+```text
+pnpm Workspaces
+```
+
+Build tooling:
+
+```text
+TypeScript
+```
+
+Containerization:
+
+```text
+Docker
+```
+
+Local infrastructure:
+
+```text
+Docker Compose
+```
+
+CI:
+
+```text
+GitHub Actions
+```
+
+Flutter SDK:
+
+```text
+Dart
+
+Flutter
+```
+
+---
+
+# 115. ARCHITECTURE DECISION RECORDS
+
+Important technical decisions must be documented.
+
+Recommended ADRs:
+
+```text
+ADR-001
+
+Why Control Plane and Data Plane Are Separated
+```
+
+```text
+ADR-002
+
+Why SDK Evaluation Is Local
+```
+
+```text
+ADR-003
+
+Deterministic Percentage Rollout Design
+```
+
+```text
+ADR-004
+
+Configuration Snapshot Architecture
+```
+
+```text
+ADR-005
+
+Immutable Configuration Versions
+```
+
+```text
+ADR-006
+
+Optimistic Concurrency Control
+```
+
+```text
+ADR-007
+
+Last Known Good Configuration
+```
+
+```text
+ADR-008
+
+Polling Instead Of Real-Time Streaming For v1.0.0
+```
+
+---
+
+# 116. CI/CD
+
+Every pull request should run:
+
+```text
+Install
+
+↓
+
+Format Check
+
+↓
+
+Lint
+
+↓
+
+Type Check
+
+↓
+
+Unit Tests
+
+↓
+
+Integration Tests
+
+↓
+
+Contract Tests
+
+↓
+
+Build
+```
+
+Main branch should remain healthy.
+
+---
+
+# 117. CODE QUALITY
+
+The project should enforce:
+
+```text
+Formatting
+
+Linting
+
+Type Checking
+
+Tests
+```
+
+Broken code should not silently merge.
+
+---
+
+# 118. LOCAL DEVELOPMENT
+
+A new developer should be able to run:
+
+```text
+Clone
+
+↓
+
+Install Dependencies
+
+↓
+
+Start Infrastructure
+
+↓
+
+Run Migrations
+
+↓
+
+Start Services
+```
+
+The process should be documented.
+
+---
+
+# 119. DOCKER ARCHITECTURE
+
+Development environment:
+
+```text
+Docker Compose
+
+│
+
+├── PostgreSQL
+
+├── Control API
+
+├── Distribution API
+
+└── Dashboard
+```
+
+---
+
+# 120. HEALTH CHECKS
+
+Services should expose:
+
+```text
+Liveness
+
+Readiness
+
+Dependency Health
+```
+
+Example:
+
+```text
+/health
+```
+
+A service should not claim readiness if a critical dependency is unavailable.
+
+---
+
+# 121. DOCUMENTATION
+
+Documentation is part of the product.
+
+Required documentation:
+
+```text
+README
+
+Architecture
+
+Quick Start
+
+API Documentation
+
+SDK Documentation
+
+Self Hosting
+
+Security
+
+Contributing
+
+Architecture Decisions
+```
+
+---
+
+# 122. README
+
+The README should explain:
+
+```text
+What Is CONTROLPLANE?
+
+Why Does It Exist?
+
+Core Features
+
+Architecture
+
+Quick Start
+
+SDK Example
+
+Self Hosting
+```
+
+---
+
+# 123. ARCHITECTURE DOCUMENTATION
+
+Explain:
+
+```text
+Control Plane
+
+Data Plane
+
+SDK
+
+Configuration Lifecycle
+
+Evaluation Pipeline
+```
+
+Architecture diagrams should be included.
+
+---
+
+# 124. SDK DOCUMENTATION
+
+Every SDK requires:
+
+```text
+Installation
+
+Initialization
+
+Synchronization
+
+Evaluation
+
+Evaluation Context
+
+Typed Values
+
+Offline Behavior
+
+Safe Defaults
+```
+
+---
+
+# 125. SELF HOSTING
+
+The project should support self-hosting.
+
+Minimum deployment:
+
+```text
+PostgreSQL
+
++
+
+Control API
+
++
+
+Distribution API
+
++
+
+Dashboard
+```
+
+Docker Compose should support basic deployment.
+
+---
+
+# 126. v1.0.0 USER JOURNEY
+
+The ideal demonstration:
+
+```text
+STEP 1
+
+Developer Writes Feature Code
+
+
+↓
+
+STEP 2
+
+Developer Adds Feature Flag
+
+
+↓
+
+STEP 3
+
+Application Is Released
+
+
+↓
+
+STEP 4
+
+Feature Is Disabled
+
+
+↓
+
+STEP 5
+
+Developer Enables Feature
+
+for
+
+Internal Users
+
+
+↓
+
+STEP 6
+
+Developer Enables
+
+5% Rollout
+
+
+↓
+
+STEP 7
+
+Developer Increases
+
+to
+
+25%
+
+
+↓
+
+STEP 8
+
+Developer Increases
+
+to
+
+50%
+
+
+↓
+
+STEP 9
+
+Problem Is Detected
+
+
+↓
+
+STEP 10
+
+Developer Rolls Back
+
+
+↓
+
+STEP 11
+
+Applications Receive Previous Configuration
+
+
+↓
+
+NO NEW APPLICATION RELEASE
+```
+
+This demonstration should be reproducible.
+
+---
+
+# 127. v1.0.0 DEFINITION OF DONE
+
+CONTROLPLANE v1.0.0 is complete when:
+
+```text
+DOMAIN
+
+✓ Organizations
+
+✓ Projects
+
+✓ Environments
+
+✓ Feature Flags
+
+✓ Typed Values
+
+
+EVALUATION
+
+✓ Local Evaluation
+
+✓ Deterministic Results
+
+✓ Rule Engine
+
+✓ Rule Priority
+
+✓ Percentage Rollout
+
+✓ Stable Rollout
+
+
+CONFIGURATION
+
+✓ Snapshots
+
+✓ Validation
+
+✓ Checksums
+
+✓ Immutable Versions
+
+✓ Optimistic Concurrency
+
+
+RECOVERY
+
+✓ Rollback
+
+✓ Kill Switch
+
+✓ Last Known Good Configuration
+
+✓ Offline Support
+
+✓ Safe Defaults
+
+
+SDK
+
+✓ Flutter SDK
+
+✓ JavaScript SDK
+
+✓ Cross-SDK Compatibility
+
+
+SECURITY
+
+✓ Authentication
+
+✓ RBAC
+
+✓ Tenant Isolation
+
+✓ SDK Keys
+
+✓ Key Revocation
+
+✓ Input Validation
+
+
+OBSERVABILITY
+
+✓ Audit Logs
+
+✓ Structured Logs
+
+✓ Metrics
+
+
+DASHBOARD
+
+✓ Flag Management
+
+✓ Rule Management
+
+✓ Rollout Management
+
+✓ Version History
+
+✓ Rollback
+
+✓ Audit Viewer
+
+
+QUALITY
+
+✓ Unit Tests
+
+✓ Integration Tests
+
+✓ Contract Tests
+
+✓ Compatibility Tests
+
+✓ Failure Tests
+
+
+OPERATIONS
+
+✓ Docker
+
+✓ Docker Compose
+
+✓ Health Checks
+
+✓ CI
+
+
+DOCUMENTATION
+
+✓ README
+
+✓ Architecture
+
+✓ SDK Documentation
+
+✓ API Documentation
+
+✓ Self Hosting
+```
+
+---
+
+# 128. WHAT MAKES THIS PROJECT PROFESSIONAL
+
+CONTROLPLANE should not attempt to look professional through:
+
+```text
+Fancy UI
+
+Large Number Of Pages
+
+Complex Animations
+
+Too Many Features
+```
+
+It should demonstrate engineering quality through:
+
+```text
+Clear Architecture
+
+Correct Boundaries
+
+Deterministic Algorithms
+
+Immutable History
+
+Transactional Operations
+
+Concurrency Control
+
+Failure Handling
+
+Offline Resilience
+
+Cross-SDK Contracts
+
+Security Boundaries
+
+Auditability
+
+Strong Tests
+
+Documentation
+```
+
+---
+
+# 129. THE CORE ENGINEERING DEMONSTRATION
+
+The strongest technical demonstration is:
+
+```text
+ONE CONFIGURATION
+
+↓
+
+MULTIPLE SDKs
+
+↓
+
+SAME EVALUATION CONTEXT
+
+↓
+
+SAME RESULT
+```
+
+Combined with:
+
+```text
+Network Failure
+
+↓
+
+Application Still Works
+```
+
+And:
+
+```text
+Bad Configuration
+
+↓
+
+SDK Rejects It
+
+↓
+
+Previous Valid Configuration Remains Active
+```
+
+And:
+
+```text
+Production Problem
+
+↓
+
+Rollback Configuration
+
+↓
+
+No New Application Release
+```
+
+These scenarios demonstrate genuine engineering maturity.
+
+---
+
+# 130. FINAL SYSTEM FLOW
+
+```text
+DEVELOPER
+    │
+    ▼
+DASHBOARD
+    │
+    ▼
+CONTROL API
+    │
+    ▼
+AUTHORIZATION
+    │
+    ▼
+DOMAIN SERVICES
+    │
+    ▼
+POSTGRESQL
+    │
+    ▼
+CONFIGURATION SNAPSHOT
+    │
+    ▼
+IMMUTABLE VERSION
+    │
+    ▼
+DISTRIBUTION API
+    │
+    ▼
+SDK SYNCHRONIZATION
+    │
+    ▼
+LOCAL CACHE
+    │
+    ▼
+LOCAL EVALUATION
+    │
+    ▼
+APPLICATION BEHAVIOR
+```
+
+---
+
+# 131. THE CENTRAL IDEA
+
+CONTROLPLANE is built around one fundamental concept:
+
+```text
+DEPLOYMENT
+
+≠
+
+RELEASE
+```
+
+A feature can be:
+
+```text
+DEPLOYED
+
+but
+
+DISABLED
+```
+
+Then:
+
+```text
+INTERNAL USERS
+
+↓
+
+BETA USERS
+
+↓
+
+5%
+
+↓
+
+25%
+
+↓
+
+50%
+
+↓
+
+100%
+```
+
+If necessary:
+
+```text
+INSTANT ROLLBACK
+```
+
+Without:
+
+```text
+NEW CODE
+
+NEW BUILD
+
+NEW APP RELEASE
+```
+
+---
+
+# 132. FINAL ENGINEERING PRINCIPLE
+
+The project must prioritize:
+
+```text
+Correctness
+
+over
+
+Complexity
+```
+
+```text
+Reliability
+
+over
+
+Feature Count
+```
+
+```text
+Determinism
+
+over
+
+Random Behavior
+```
+
+```text
+Failure Recovery
+
+over
+
+Happy Path Only
+```
+
+```text
+Architecture
+
+over
+
+Dashboard Appearance
+```
+
+The goal is not to build:
+
+```text
+A FEATURE FLAG DASHBOARD
+```
+
+The goal is to build:
+
+```text
+A RELIABLE FEATURE DELIVERY SYSTEM
+```
+
+---
+
+# 133. FUTURE ROADMAP — POST v1.0.0
+
+Potential future features:
+
+```text
+v1.1.0
+
+Scheduled Rollouts
+
+Additional SDKs
+
+More Targeting Operators
+```
+
+```text
+v1.2.0
+
+SSE Configuration Updates
+
+Real-Time Dashboard Updates
+```
+
+```text
+v1.3.0
+
+Automatic Progressive Rollouts
+
+Deployment Integrations
+```
+
+```text
+v2.0.0
+
+Experimentation
+
+A/B Testing
+
+Metrics
+
+Experiment Analysis
+```
+
+These are intentionally outside the v1.0.0 scope.
+
+---
+
+# 134. FINAL PROJECT IDENTITY
+
+CONTROLPLANE should be described as:
+
+> A self-hostable, developer-first feature delivery platform built around deterministic local evaluation, stable percentage rollouts, immutable configuration versioning, instant rollback, and resilient SDK caching.
+
+---
+
+# FINAL SUMMARY
+
+CONTROLPLANE solves a fundamental software delivery problem.
+
+```text
+Traditional Delivery
+
+Code Change
+
+↓
+
+Build
+
+↓
+
+Release
+
+↓
+
+Users
+```
+
+CONTROLPLANE introduces:
+
+```text
+Code Deployment
+
+↓
+
+Remote Configuration
+
+↓
+
+Local SDK Evaluation
+
+↓
+
+Controlled Feature Release
+```
+
+The feature is already inside the application.
+
+CONTROLPLANE controls:
+
+```text
+WHO
+
+gets the feature
+
+
+WHEN
+
+they get it
+
+
+HOW MUCH
+
+of the user population receives it
+```
+
+And when something goes wrong:
+
+```text
+DISABLE
+
+or
+
+ROLL BACK
+```
+
+without requiring:
+
+```text
+A NEW APPLICATION RELEASE
+```
+
+---
+
+# END OF project.txt

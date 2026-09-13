@@ -1,0 +1,42 @@
+CONTROLPLANE — DEVELOPMENT ROADMAP
+Reference Document: CONTROLPLANE — phase.txt.md
+
+Project: CONTROLPLANE
+Target Release: v1.0.0
+
+Development Principle:
+Core correctness → deterministic behavior → reliability → SDKs → distribution → security → dashboard → release
+
+Milestones:
+- Milestone 0: Project Foundation (Current)
+- Milestone 1: Core Domain Model
+- Milestone 2: Database & Persistence
+- Milestone 3: Authentication
+- Milestone 4: RBAC & Tenant Isolation
+- Milestone 5: Feature Management API
+- Milestone 6: Evaluation Engine
+- Milestone 7: Rule Engine
+- Milestone 8: Deterministic Percentage Rollout
+- Milestone 9: Configuration Snapshots
+- Milestone 10: Configuration Versioning
+- Milestone 11: Rollback System
+- Milestone 12: Distribution API
+- Milestone 13: SDK Core
+- Milestone 14: Local Caching
+- Milestone 15: Flutter SDK
+- Milestone 16: JavaScript / Node SDK
+- Milestone 17: Progressive Rollouts
+- Milestone 18: Kill Switch
+- Milestone 19: Audit System
+- Milestone 20: Observability
+- Milestone 21: Dashboard
+- Milestone 22: Contract Testing
+- Milestone 23: Failure Testing
+- Milestone 24: Security Hardening
+- Milestone 25: Performance & Load Testing
+- Milestone 26: Deployment
+- Milestone 27: Documentation
+- Milestone 28: Release Readiness Audit
+- Milestone 29: v1.0.0 Release
+
+For detailed phase steps and completion criteria, see CONTROLPLANE — phase.txt.md.

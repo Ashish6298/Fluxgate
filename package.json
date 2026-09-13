@@ -1,0 +1,35 @@
+{
+  "name": "controlplane-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Developer-first, self-hostable feature delivery and configuration management platform",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/*\" --filter \"./apps/*\" --filter \"./sdks/*\" run build",
+    "test": "vitest run",
+    "test:unit": "vitest run --dir packages sdks",
+    "test:integration": "vitest run --dir tests/integration",
+    "test:contract": "vitest run --dir tests/contract",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r exec tsc --noEmit"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@types/node": "^22.13.4",
+    "eslint": "^9.20.1",
+    "globals": "^15.15.0",
+    "prettier": "^3.5.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.0",
+    "vitest": "^3.0.5",
+    "zod": "^3.24.2"
+  }
+}

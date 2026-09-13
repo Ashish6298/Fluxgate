@@ -1,0 +1,3381 @@
+# CONTROLPLANE — DEVELOPMENT ROADMAP
+
+**Project:** CONTROLPLANE  
+**Category:** Developer Infrastructure / Feature Delivery Platform  
+**Target Release:** v1.0.0
+
+---
+
+# PROJECT DEVELOPMENT PHILOSOPHY
+
+CONTROLPLANE must not be developed like a typical CRUD application.
+
+The development order should follow this principle:
+
+> **Core correctness → deterministic behavior → reliability → SDKs → distribution → security → dashboard → release**
+
+The dashboard is not the product's core.
+
+The core of CONTROLPLANE is:
+
+```text
+Configuration
+      ↓
+Distribution
+      ↓
+SDK
+      ↓
+Local Evaluation
+      ↓
+Application Behavior
+```
+
+Every milestone must preserve the following principles:
+
+- Deterministic behavior
+- Strong contracts
+- Local evaluation
+- Safe failure behavior
+- Immutable history
+- Minimal unnecessary complexity
+- Strong automated tests
+- Clear architecture
+- No premature optimization
+- No unnecessary features
+
+---
+
+# MILESTONE 0 — PROJECT FOUNDATION
+
+## Goal
+
+Establish the architecture, repository, engineering standards, and documentation before writing business logic.
+
+---
+
+## PHASE 0.1 — Product Definition
+
+### Objective
+
+Define exactly what CONTROLPLANE is.
+
+### Implementation
+
+Document:
+
+- Product name
+- Product purpose
+- Target users
+- Core problem
+- Product boundaries
+- v1.0.0 scope
+- Non-goals
+- Architecture philosophy
+
+### Core Product Statement
+
+> CONTROLPLANE is a developer-first feature delivery platform that allows applications to remotely control feature exposure using locally evaluated configuration, deterministic percentage rollouts, rule-based targeting, configuration versioning, and instant rollback.
+
+### Important Limitation
+
+The system cannot remotely inject completely new application code.
+
+The feature must already exist inside the deployed application.
+
+CONTROLPLANE only decides:
+
+```text
+Should this feature execute?
+```
+
+### Completion Criteria
+
+- Product scope documented
+- Core terminology defined
+- v1.0.0 boundaries defined
+- Non-goals documented
+
+---
+
+## PHASE 0.2 — Control Plane vs Data Plane
+
+### Objective
+
+Define the fundamental architecture.
+
+### Control Plane
+
+Responsible for:
+
+```text
+Organizations
+Projects
+Environments
+Feature Flags
+Rules
+Rollouts
+Configuration Changes
+Version History
+Rollback
+Audit Logs
+API Keys
+RBAC
+```
+
+### Data Plane
+
+Responsible for:
+
+```text
+Configuration Distribution
+SDK Synchronization
+Configuration Version Checking
+Conditional Requests
+```
+
+### SDK
+
+Responsible for:
+
+```text
+Local Cache
+Configuration Validation
+Rule Evaluation
+Percentage Rollout
+Safe Defaults
+Offline Behavior
+```
+
+### Architecture
+
+```text
+                    CONTROLPLANE
+
+                   CONTROL PLANE
+
+             Dashboard + Management API
+
+                        │
+                        ▼
+
+                Configuration Store
+
+                        │
+
+                 Configuration Versions
+
+                        │
+                        ▼
+
+                    DATA PLANE
+
+               Distribution Service
+
+                        │
+          ┌─────────────┼─────────────┐
+          │             │             │
+          ▼             ▼             ▼
+
+       Flutter       JavaScript      Node
+         SDK             SDK          SDK
+
+          │             │             │
+          └─────────────┼─────────────┘
+                        │
+                        ▼
+
+               LOCAL EVALUATION
+```
+
+### Completion Criteria
+
+- Architecture documented
+- Responsibility boundaries clear
+- No overlapping responsibilities
+
+---
+
+## PHASE 0.3 — Monorepo Setup
+
+### Objective
+
+Create a professional repository structure.
+
+### Repository Structure
+
+```text
+controlplane/
+│
+├── apps/
+│   ├── dashboard/
+│   ├── control-api/
+│   └── distribution-api/
+│
+├── packages/
+│   ├── contracts/
+│   ├── evaluation-engine/
+│   ├── config-model/
+│   ├── hashing/
+│   ├── rollout-engine/
+│   └── config-client/
+│
+├── sdks/
+│   ├── javascript/
+│   ├── node/
+│   └── flutter/
+│
+├── tests/
+│   ├── integration/
+│   ├── contract/
+│   ├── compatibility/
+│   └── load/
+│
+├── infrastructure/
+│   ├── docker/
+│   ├── database/
+│   └── deployment/
+│
+├── docs/
+│   ├── architecture/
+│   ├── decisions/
+│   ├── api/
+│   ├── sdk/
+│   └── operations/
+│
+├── scripts/
+│
+├── project.txt
+├── phase.txt
+├── README.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+└── LICENSE
+```
+
+### Completion Criteria
+
+- Repository structure created
+- Package boundaries defined
+- No circular dependencies
+
+---
+
+## PHASE 0.4 — Development Toolchain
+
+### Objective
+
+Create a reproducible development environment.
+
+### Implementation
+
+Configure:
+
+- Package manager
+- Workspaces
+- TypeScript
+- Formatting
+- Linting
+- Type checking
+- Test runner
+- Build commands
+
+### Required Commands
+
+```text
+install
+build
+test
+test:unit
+test:integration
+lint
+format
+typecheck
+```
+
+### Completion Criteria
+
+A clean clone should be able to:
+
+```text
+Install
+↓
+Build
+↓
+Test
+```
+
+without undocumented manual steps.
+
+---
+
+## PHASE 0.5 — CI Foundation
+
+### Objective
+
+Ensure broken code cannot silently enter the repository.
+
+### Pipeline
+
+```text
+Pull Request
+      │
+      ▼
+Format Check
+      │
+      ▼
+Lint
+      │
+      ▼
+Type Check
+      │
+      ▼
+Unit Tests
+      │
+      ▼
+Build
+```
+
+### Completion Criteria
+
+- CI configured
+- Failing tests fail CI
+- Type errors fail CI
+- Lint errors fail CI
+
+---
+
+# MILESTONE 1 — CORE DOMAIN MODEL
+
+## Goal
+
+Define the data model before implementing APIs.
+
+---
+
+## PHASE 1.1 — Organization
+
+### Model
+
+```text
+Organization
+
+id
+name
+createdAt
+updatedAt
+```
+
+### Responsibility
+
+Represents a tenant.
+
+### Relationship
+
+```text
+Organization
+      │
+      └── Projects
+```
+
+### Tests
+
+- Creation
+- Validation
+- Identifier uniqueness
+
+---
+
+## PHASE 1.2 — Project
+
+### Model
+
+```text
+Project
+
+id
+organizationId
+name
+key
+createdAt
+updatedAt
+```
+
+### Relationship
+
+```text
+Organization
+      │
+      ├── Project A
+      │
+      └── Project B
+```
+
+### Requirements
+
+Project keys must be:
+
+- Stable
+- Unique within organization
+- Validated
+
+---
+
+## PHASE 1.3 — Environment
+
+### Model
+
+```text
+Environment
+
+id
+projectId
+name
+key
+type
+createdAt
+updatedAt
+```
+
+### Example
+
+```text
+Project
+
+│
+├── Development
+│
+├── Staging
+│
+└── Production
+```
+
+### Important Rule
+
+Configuration is environment-specific.
+
+A change in:
+
+```text
+Development
+```
+
+must not automatically affect:
+
+```text
+Production
+```
+
+---
+
+## PHASE 1.4 — Feature Flag
+
+### Model
+
+```text
+FeatureFlag
+
+id
+environmentId
+key
+name
+description
+type
+defaultValue
+enabled
+createdAt
+updatedAt
+```
+
+### Supported Types
+
+```text
+Boolean
+String
+Number
+JSON
+```
+
+### Example
+
+```text
+new_checkout
+
+type:
+Boolean
+
+default:
+false
+```
+
+---
+
+## PHASE 1.5 — Targeting Rule
+
+### Model
+
+```text
+TargetingRule
+
+id
+featureFlagId
+priority
+conditions
+value
+enabled
+```
+
+### Example
+
+```text
+IF
+
+platform == android
+
+AND
+
+country == IN
+
+THEN
+
+true
+```
+
+---
+
+## PHASE 1.6 — Rollout
+
+### Model
+
+```text
+Rollout
+
+id
+featureFlagId
+percentage
+salt
+enabled
+```
+
+### Example
+
+```text
+Feature:
+new_checkout
+
+Rollout:
+25%
+```
+
+---
+
+## PHASE 1.7 — Configuration Version
+
+### Model
+
+```text
+ConfigurationVersion
+
+id
+environmentId
+version
+snapshot
+checksum
+createdBy
+reason
+createdAt
+```
+
+### Important Rule
+
+Configuration versions are:
+
+```text
+IMMUTABLE
+```
+
+---
+
+## PHASE 1.8 — Audit Event
+
+### Model
+
+```text
+AuditEvent
+
+id
+organizationId
+actorId
+action
+resourceType
+resourceId
+before
+after
+createdAt
+```
+
+### Completion Criteria
+
+The entire domain model must be defined before moving to API development.
+
+---
+
+# MILESTONE 2 — DATABASE & PERSISTENCE
+
+## Goal
+
+Build reliable persistence with strong constraints.
+
+---
+
+## PHASE 2.1 — PostgreSQL Setup
+
+### Implementation
+
+Set up:
+
+```text
+PostgreSQL
+```
+
+Create:
+
+- Database migrations
+- Development database
+- Test database
+
+### Completion Criteria
+
+Database can be recreated entirely from migrations.
+
+---
+
+## PHASE 2.2 — Schema Implementation
+
+Create tables for:
+
+```text
+Organizations
+Projects
+Environments
+FeatureFlags
+TargetingRules
+Rollouts
+ConfigurationVersions
+AuditEvents
+Users
+Roles
+APIKeys
+```
+
+---
+
+## PHASE 2.3 — Database Constraints
+
+Implement:
+
+- Primary keys
+- Foreign keys
+- Unique constraints
+- Required fields
+- Indexes
+
+### Example
+
+```text
+organizationId + projectKey
+
+must be unique
+```
+
+---
+
+## PHASE 2.4 — Transaction Boundaries
+
+Identify operations requiring transactions.
+
+Example:
+
+```text
+Update Flag
+      +
+Generate Snapshot
+      +
+Create Version
+      +
+Create Audit Event
+```
+
+These operations should not partially succeed.
+
+### Desired Behavior
+
+```text
+SUCCESS
+
+OR
+
+COMPLETE ROLLBACK
+```
+
+---
+
+## PHASE 2.5 — Repository Layer
+
+Separate:
+
+```text
+Business Logic
+```
+
+from:
+
+```text
+Database Logic
+```
+
+Architecture:
+
+```text
+Service
+   │
+   ▼
+Repository Interface
+   │
+   ▼
+PostgreSQL Implementation
+```
+
+---
+
+## PHASE 2.6 — Database Tests
+
+Test:
+
+- Migrations
+- Constraints
+- Transactions
+- Concurrent updates
+- Foreign key protection
+
+---
+
+# MILESTONE 3 — AUTHENTICATION
+
+## Goal
+
+Secure the management system.
+
+---
+
+## PHASE 3.1 — User Authentication
+
+Implement:
+
+- Registration strategy
+- Login
+- Session/token management
+- Logout
+- Protected endpoints
+
+---
+
+## PHASE 3.2 — Authentication Middleware
+
+Every protected request must follow:
+
+```text
+Request
+   │
+   ▼
+Authentication
+   │
+   ▼
+Identity
+   │
+   ▼
+Authorization
+   │
+   ▼
+Resource
+```
+
+---
+
+## PHASE 3.3 — Security Baseline
+
+Implement:
+
+- Secure password handling
+- Token validation
+- Expiration
+- Invalid token handling
+- Secure error responses
+
+---
+
+# MILESTONE 4 — RBAC & TENANT ISOLATION
+
+## Goal
+
+Ensure users can only perform authorized actions.
+
+---
+
+## PHASE 4.1 — Roles
+
+Implement:
+
+```text
+Owner
+Admin
+Developer
+Viewer
+```
+
+---
+
+## PHASE 4.2 — Permission Matrix
+
+Example:
+
+```text
+                    Owner Admin Developer Viewer
+
+View Flags           YES   YES     YES      YES
+
+Create Flags         YES   YES     YES      NO
+
+Modify Flags         YES   YES     YES      NO
+
+Production Rollout   YES   YES     POLICY   NO
+
+Rollback             YES   YES     YES      NO
+
+Delete Project       YES   NO      NO       NO
+```
+
+---
+
+## PHASE 4.3 — Authorization Layer
+
+Authorization must occur in:
+
+```text
+Service Layer
+```
+
+not only in the UI.
+
+---
+
+## PHASE 4.4 — Tenant Isolation
+
+Critical invariant:
+
+```text
+Tenant A
+
+CANNOT
+
+access
+
+Tenant B
+```
+
+### Required Tests
+
+Attempt:
+
+- Cross-organization project access
+- Cross-organization environment access
+- Cross-organization flag access
+
+All must fail.
+
+---
+
+# MILESTONE 5 — FEATURE MANAGEMENT API
+
+## Goal
+
+Build the Control Plane management API.
+
+---
+
+## PHASE 5.1 — API Foundation
+
+Implement:
+
+- Routing
+- Request validation
+- Error handling
+- Request IDs
+- API response conventions
+
+---
+
+## PHASE 5.2 — Organization API
+
+Implement:
+
+```text
+Create Organization
+Get Organization
+Update Organization
+```
+
+---
+
+## PHASE 5.3 — Project API
+
+Implement:
+
+```text
+Create Project
+List Projects
+Get Project
+Update Project
+```
+
+---
+
+## PHASE 5.4 — Environment API
+
+Implement:
+
+```text
+Create Environment
+List Environments
+Update Environment
+```
+
+---
+
+## PHASE 5.5 — Feature Flag API
+
+Implement:
+
+```text
+Create Flag
+Get Flag
+List Flags
+Update Flag
+Archive/Delete Flag
+```
+
+---
+
+## PHASE 5.6 — Flag Validation
+
+Validate:
+
+- Flag key
+- Type
+- Default value
+- Environment ownership
+- Duplicate keys
+
+---
+
+# MILESTONE 6 — EVALUATION ENGINE
+
+# IMPORTANT
+
+This is one of the most important milestones in the entire project.
+
+The evaluation engine must be developed before the dashboard.
+
+---
+
+## PHASE 6.1 — Evaluation Context
+
+Define:
+
+```text
+EvaluationContext
+
+userId
+anonymousId
+platform
+appVersion
+country
+language
+customAttributes
+```
+
+Example:
+
+```json
+{
+  "userId": "user_123",
+  "platform": "android",
+  "appVersion": "2.1.0",
+  "country": "IN"
+}
+```
+
+---
+
+## PHASE 6.2 — Evaluation Result
+
+Define:
+
+```text
+EvaluationResult
+
+value
+reason
+flagKey
+configurationVersion
+matchedRule
+```
+
+Example:
+
+```json
+{
+  "value": true,
+  "reason": "PERCENTAGE_ROLLOUT",
+  "flagKey": "new_checkout"
+}
+```
+
+---
+
+## PHASE 6.3 — Boolean Evaluation
+
+Implement:
+
+```text
+Flag Enabled?
+
+YES
+ ↓
+Evaluate
+
+NO
+ ↓
+Return Default
+```
+
+---
+
+## PHASE 6.4 — Typed Evaluation
+
+Implement:
+
+```text
+Boolean
+String
+Number
+JSON
+```
+
+---
+
+## PHASE 6.5 — Evaluation Pipeline
+
+Final pipeline:
+
+```text
+Evaluation Request
+        │
+        ▼
+Validate Configuration
+        │
+        ▼
+Find Flag
+        │
+        ▼
+Flag Enabled?
+        │
+        ├── NO
+        │
+        │    ▼
+        │
+        │ Default Value
+        │
+        └── YES
+              │
+              ▼
+        Evaluate Rules
+              │
+              ▼
+       Rule Matched?
+              │
+        YES ───┴─── NO
+         │           │
+         ▼           ▼
+       Result      Rollout
+                       │
+                       ▼
+                  Final Result
+```
+
+---
+
+## PHASE 6.6 — Evaluation Determinism
+
+Critical invariant:
+
+```text
+Same Configuration
+
++
+
+Same Context
+
+=
+
+Same Result
+```
+
+Always.
+
+---
+
+## PHASE 6.7 — Evaluation Tests
+
+Test:
+
+- Unknown flag
+- Disabled flag
+- Enabled flag
+- Invalid configuration
+- Missing context
+- Default values
+- Typed values
+
+---
+
+# MILESTONE 7 — RULE ENGINE
+
+## Goal
+
+Build deterministic rule-based targeting.
+
+---
+
+## PHASE 7.1 — String Operators
+
+Implement:
+
+```text
+equals
+notEquals
+contains
+startsWith
+endsWith
+in
+notIn
+```
+
+---
+
+## PHASE 7.2 — Numeric Operators
+
+Implement:
+
+```text
+greaterThan
+greaterThanOrEqual
+lessThan
+lessThanOrEqual
+```
+
+---
+
+## PHASE 7.3 — Version Operators
+
+Implement:
+
+```text
+versionEquals
+versionGreaterThan
+versionGreaterThanOrEqual
+versionLessThan
+versionLessThanOrEqual
+```
+
+---
+
+## PHASE 7.4 — Existence Operators
+
+Implement:
+
+```text
+exists
+notExists
+```
+
+---
+
+## PHASE 7.5 — Logical Operators
+
+Implement:
+
+```text
+AND
+OR
+NOT
+```
+
+---
+
+## PHASE 7.6 — Rule Priority
+
+Example:
+
+```text
+Priority 1
+
+Internal Users
+
+
+Priority 2
+
+Beta Users
+
+
+Priority 3
+
+Android Users
+
+
+Default
+```
+
+Rules must always be evaluated in deterministic order.
+
+---
+
+## PHASE 7.7 — Rule Engine Tests
+
+Test:
+
+- Every operator
+- Nested conditions
+- Missing attributes
+- Invalid values
+- Priority behavior
+
+---
+
+# MILESTONE 8 — DETERMINISTIC PERCENTAGE ROLLOUT
+
+# IMPORTANT
+
+This is another core engineering milestone.
+
+---
+
+## PHASE 8.1 — Canonical Input
+
+Define:
+
+```text
+projectKey
++
+environmentKey
++
+flagKey
++
+userIdentifier
++
+rolloutSalt
+```
+
+Example:
+
+```text
+my-app
+:
+production
+:
+new-checkout
+:
+user_123
+:
+v1
+```
+
+---
+
+## PHASE 8.2 — Hashing Algorithm
+
+Implement a documented deterministic algorithm.
+
+Process:
+
+```text
+Canonical Input
+       │
+       ▼
+      Hash
+       │
+       ▼
+Unsigned Integer
+       │
+       ▼
+Bucket
+```
+
+---
+
+## PHASE 8.3 — Bucket System
+
+Recommended:
+
+```text
+0 → 9999
+```
+
+This provides:
+
+```text
+0.01%
+```
+
+granularity.
+
+Example:
+
+```text
+Hash Bucket:
+
+723
+
+Rollout:
+
+10%
+
+Threshold:
+
+1000
+
+723 < 1000
+
+ENABLED
+```
+
+---
+
+## PHASE 8.4 — Rollout Stability
+
+Test:
+
+```text
+5%
+↓
+10%
+↓
+25%
+↓
+50%
+```
+
+Users in the original:
+
+```text
+5%
+```
+
+must remain enabled when increasing the rollout.
+
+---
+
+## PHASE 8.5 — Golden Test Vectors
+
+Create shared test cases.
+
+Example:
+
+```text
+Input
+
+user_123
+new_checkout
+production
+
+
+Expected Bucket
+
+7234
+```
+
+Every SDK must produce the same result.
+
+---
+
+## PHASE 8.6 — Distribution Testing
+
+Verify:
+
+- Bucket range
+- Stability
+- Determinism
+- Reasonable distribution
+
+---
+
+# MILESTONE 9 — CONFIGURATION SNAPSHOTS
+
+## Goal
+
+Create the data format distributed to SDKs.
+
+---
+
+## PHASE 9.1 — Configuration Schema
+
+Define:
+
+```json
+{
+  "schemaVersion": 1,
+  "projectKey": "my-app",
+  "environmentKey": "production",
+  "configurationVersion": 42,
+  "flags": []
+}
+```
+
+---
+
+## PHASE 9.2 — Snapshot Generation
+
+The system must generate:
+
+```text
+Environment Configuration
+        │
+        ▼
+Normalized Snapshot
+        │
+        ▼
+Validation
+        │
+        ▼
+Checksum
+        │
+        ▼
+Immutable Version
+```
+
+---
+
+## PHASE 9.3 — Schema Validation
+
+Validate:
+
+- Required fields
+- Flag types
+- Rules
+- Rollout percentage
+- Schema version
+
+---
+
+## PHASE 9.4 — Configuration Integrity
+
+Every configuration should have:
+
+```text
+Version
+
++
+
+Checksum
+```
+
+---
+
+# MILESTONE 10 — CONFIGURATION VERSIONING
+
+## Goal
+
+Create immutable configuration history.
+
+---
+
+## PHASE 10.1 — Version Creation
+
+Every configuration change creates:
+
+```text
+v1
+↓
+v2
+↓
+v3
+```
+
+Never overwrite history.
+
+---
+
+## PHASE 10.2 — Version Metadata
+
+Store:
+
+```text
+Version
+Actor
+Timestamp
+Reason
+Checksum
+Parent Version
+```
+
+---
+
+## PHASE 10.3 — Snapshot History
+
+Allow inspection of:
+
+```text
+v42
+
+vs
+
+v43
+```
+
+---
+
+## PHASE 10.4 — Concurrency Control
+
+Consider:
+
+```text
+Developer A
+
+and
+
+Developer B
+```
+
+editing the same configuration.
+
+Implement a safe strategy such as:
+
+```text
+Optimistic Concurrency Control
+```
+
+Example:
+
+```text
+Expected Version:
+
+42
+
+Actual Version:
+
+43
+
+Conflict
+```
+
+---
+
+# MILESTONE 11 — ROLLBACK SYSTEM
+
+## Goal
+
+Provide safe configuration recovery.
+
+---
+
+## PHASE 11.1 — Rollback Design
+
+Example:
+
+```text
+v41
+v42
+v43 ← Current
+```
+
+Rollback:
+
+```text
+v43
+ ↓
+v41
+```
+
+Important:
+
+Do not simply change:
+
+```text
+Current Version = 41
+```
+
+Instead:
+
+```text
+v44
+
+contains restored configuration
+from v41
+```
+
+History remains:
+
+```text
+v41
+v42
+v43
+v44 ← restored v41
+```
+
+---
+
+## PHASE 11.2 — Rollback API
+
+Implement:
+
+```text
+POST
+
+/configurations/:version/rollback
+```
+
+---
+
+## PHASE 11.3 — Rollback Validation
+
+Validate:
+
+- Permission
+- Environment
+- Target version
+- Configuration integrity
+
+---
+
+## PHASE 11.4 — Rollback Audit
+
+Record:
+
+```text
+WHO
+
+performed rollback
+
+FROM
+
+v43
+
+TO
+
+v41
+
+RESULT
+
+v44
+```
+
+---
+
+# MILESTONE 12 — DISTRIBUTION API
+
+## Goal
+
+Allow SDKs to retrieve configuration.
+
+---
+
+## PHASE 12.1 — SDK API Keys
+
+Create separate credentials.
+
+```text
+Management Credentials
+
+≠
+
+SDK Credentials
+```
+
+SDK keys must:
+
+```text
+READ CONFIGURATION ONLY
+```
+
+---
+
+## PHASE 12.2 — Configuration Endpoint
+
+Example:
+
+```text
+GET
+
+/sdk/config
+```
+
+Return:
+
+```text
+Configuration Snapshot
+Configuration Version
+Schema Version
+Checksum
+```
+
+---
+
+## PHASE 12.3 — Conditional Requests
+
+Implement:
+
+```text
+ETag
+```
+
+SDK:
+
+```text
+If-None-Match
+```
+
+Server:
+
+```text
+304 Not Modified
+```
+
+This reduces unnecessary configuration downloads.
+
+---
+
+## PHASE 12.4 — Distribution Security
+
+Implement:
+
+- SDK key validation
+- Environment scope
+- Rate limiting
+- Input validation
+
+---
+
+# MILESTONE 13 — SDK CORE
+
+## Goal
+
+Create reusable SDK architecture.
+
+---
+
+## PHASE 13.1 — SDK Interfaces
+
+Separate:
+
+```text
+Transport
+Storage
+Evaluation
+Configuration
+```
+
+Example:
+
+```text
+SDK
+
+├── ConfigurationClient
+│
+├── ConfigurationStore
+│
+├── EvaluationEngine
+│
+└── SDKLifecycle
+```
+
+---
+
+## PHASE 13.2 — SDK Initialization
+
+Lifecycle:
+
+```text
+START
+
+↓
+
+Load Cache
+
+↓
+
+Validate Cache
+
+↓
+
+Configuration Available?
+
+YES
+ ↓
+Evaluate
+
+NO
+ ↓
+Safe Defaults
+
+↓
+
+Synchronize Remote
+```
+
+---
+
+## PHASE 13.3 — SDK Synchronization
+
+Process:
+
+```text
+SDK
+ │
+ ▼
+Check Version
+ │
+ ▼
+Changed?
+
+NO
+ │
+ └── Continue
+
+YES
+ │
+ ▼
+Download Configuration
+ │
+ ▼
+Validate
+ │
+ ▼
+Store
+ │
+ ▼
+Activate
+```
+
+---
+
+# MILESTONE 14 — LOCAL CACHING
+
+## Goal
+
+Ensure applications continue working during outages.
+
+---
+
+## PHASE 14.1 — Last Known Good Configuration
+
+Store:
+
+```text
+Latest Valid Configuration
+```
+
+Never blindly store remote data.
+
+---
+
+## PHASE 14.2 — Cache Validation
+
+Before activating:
+
+```text
+Remote Config
+      │
+      ▼
+Validate
+      │
+      ▼
+Valid?
+
+YES → Store
+
+NO → Reject
+```
+
+---
+
+## PHASE 14.3 — Atomic Replacement
+
+Never partially overwrite configuration.
+
+Process:
+
+```text
+Download
+   │
+   ▼
+Validate
+   │
+   ▼
+Temporary Storage
+   │
+   ▼
+Atomic Replace
+```
+
+---
+
+## PHASE 14.4 — Offline Behavior
+
+Scenario:
+
+```text
+Internet
+
+OFFLINE
+```
+
+SDK:
+
+```text
+Load Cache
+
+↓
+
+Evaluate Locally
+```
+
+---
+
+## PHASE 14.5 — Safe Defaults
+
+Scenario:
+
+```text
+Internet
+
+OFFLINE
+
++
+
+No Cache
+```
+
+SDK:
+
+```text
+Safe Default
+```
+
+The host application must not crash.
+
+---
+
+# MILESTONE 15 — FLUTTER SDK
+
+## Goal
+
+Build the first production-quality SDK.
+
+---
+
+## PHASE 15.1 — Dart Package
+
+Create:
+
+```text
+controlplane_flutter
+```
+
+---
+
+## PHASE 15.2 — Initialization
+
+Example:
+
+```dart
+await ControlPlane.initialize(
+  apiKey: "...",
+);
+```
+
+---
+
+## PHASE 15.3 — Boolean Evaluation
+
+Example:
+
+```dart
+final enabled =
+    await ControlPlane.isEnabled(
+  "new_checkout",
+  context: context,
+);
+```
+
+---
+
+## PHASE 15.4 — Typed Evaluation
+
+Implement:
+
+```dart
+getBoolean()
+
+getString()
+
+getNumber()
+
+getJson()
+```
+
+---
+
+## PHASE 15.5 — Flutter Persistence
+
+Implement:
+
+- Persistent cache
+- Configuration version storage
+- Safe cache loading
+
+---
+
+## PHASE 15.6 — Compatibility Tests
+
+Flutter SDK must pass:
+
+- Rule tests
+- Hashing tests
+- Golden vectors
+- Offline tests
+
+---
+
+# MILESTONE 16 — JAVASCRIPT / NODE SDK
+
+## Goal
+
+Build the second SDK.
+
+---
+
+## PHASE 16.1 — TypeScript SDK
+
+Create:
+
+```text
+@controlplane/sdk
+```
+
+---
+
+## PHASE 16.2 — Evaluation API
+
+Example:
+
+```typescript
+const enabled =
+  controlplane.isEnabled(
+    "new_checkout",
+    context
+  );
+```
+
+---
+
+## PHASE 16.3 — Typed Configuration
+
+Support:
+
+```text
+Boolean
+String
+Number
+JSON
+```
+
+---
+
+## PHASE 16.4 — Shared Test Vectors
+
+Critical requirement:
+
+```text
+Flutter Result
+
+=
+
+JavaScript Result
+```
+
+For:
+
+```text
+Same Context
+
++
+
+Same Configuration
+```
+
+---
+
+# MILESTONE 17 — PROGRESSIVE ROLLOUTS
+
+## Goal
+
+Build controlled staged feature exposure.
+
+---
+
+## PHASE 17.1 — Rollout Stages
+
+Example:
+
+```text
+Stage 1
+
+5%
+
+
+Stage 2
+
+20%
+
+
+Stage 3
+
+50%
+
+
+Stage 4
+
+100%
+```
+
+---
+
+## PHASE 17.2 — Rollout State Machine
+
+States:
+
+```text
+DRAFT
+
+↓
+
+ACTIVE
+
+↓
+
+PAUSED
+
+↓
+
+COMPLETED
+```
+
+Other states:
+
+```text
+STOPPED
+
+ROLLED_BACK
+```
+
+---
+
+## PHASE 17.3 — Manual Progression
+
+Initial implementation:
+
+```text
+Developer
+
+↓
+
+Advance Stage
+```
+
+Do not build automatic rollout first.
+
+---
+
+## PHASE 17.4 — Scheduled Rollouts
+
+Optional later milestone.
+
+Example:
+
+```text
+5%
+
+for
+
+2 hours
+
+
+↓
+
+20%
+```
+
+---
+
+# MILESTONE 18 — KILL SWITCH
+
+## Goal
+
+Provide emergency feature disabling.
+
+---
+
+## PHASE 18.1 — Emergency Disable
+
+Example:
+
+```text
+payment_v2
+
+ACTIVE
+```
+
+Action:
+
+```text
+EMERGENCY DISABLE
+```
+
+---
+
+## PHASE 18.2 — Configuration Version
+
+The action must create:
+
+```text
+New Configuration Version
+```
+
+---
+
+## PHASE 18.3 — Audit Event
+
+Record:
+
+```text
+Actor
+
+Action
+
+Reason
+
+Timestamp
+```
+
+---
+
+# MILESTONE 19 — AUDIT SYSTEM
+
+## Goal
+
+Make production configuration changes traceable.
+
+---
+
+## PHASE 19.1 — Audit Events
+
+Record:
+
+```text
+Flag Created
+
+Flag Updated
+
+Rule Updated
+
+Rollout Changed
+
+Rollback
+
+Kill Switch
+
+API Key Created
+
+API Key Revoked
+```
+
+---
+
+## PHASE 19.2 — Before and After
+
+Example:
+
+```text
+Rollout
+
+Before:
+
+10%
+
+After:
+
+25%
+```
+
+---
+
+## PHASE 19.3 — Immutable Audit Log
+
+Audit records should be:
+
+```text
+APPEND ONLY
+```
+
+---
+
+# MILESTONE 20 — OBSERVABILITY
+
+## Goal
+
+Make system behavior observable.
+
+---
+
+## PHASE 20.1 — Structured Logging
+
+Include:
+
+```text
+Timestamp
+Request ID
+Service
+Operation
+Status
+Duration
+```
+
+---
+
+## PHASE 20.2 — Metrics
+
+Track:
+
+```text
+API Requests
+
+API Errors
+
+Configuration Requests
+
+Configuration Versions
+
+SDK Sync Failures
+
+Cache Hits
+
+Cache Misses
+```
+
+---
+
+## PHASE 20.3 — SDK Diagnostics
+
+Optional diagnostics:
+
+```text
+Current Configuration Version
+
+Last Successful Sync
+
+Cache Status
+
+Synchronization Status
+```
+
+---
+
+# MILESTONE 21 — DASHBOARD
+
+# IMPORTANT
+
+The dashboard comes here intentionally.
+
+By this point:
+
+```text
+Core System
+
+SHOULD ALREADY WORK
+```
+
+---
+
+## PHASE 21.1 — Dashboard Foundation
+
+Implement:
+
+- Authentication
+- Navigation
+- Organization selection
+- Project selection
+- Environment selection
+
+---
+
+## PHASE 21.2 — Feature Flag List
+
+Display:
+
+```text
+Flag Name
+
+Status
+
+Type
+
+Environment
+
+Last Updated
+```
+
+---
+
+## PHASE 21.3 — Flag Editor
+
+Allow:
+
+```text
+Enable
+
+Disable
+
+Change Default
+
+Configure Rules
+
+Configure Rollout
+```
+
+---
+
+## PHASE 21.4 — Rule Builder
+
+Build a readable interface for:
+
+```text
+Attribute
+
+Operator
+
+Value
+```
+
+---
+
+## PHASE 21.5 — Rollout Interface
+
+Allow:
+
+```text
+0%
+
+↓
+
+5%
+
+↓
+
+10%
+
+↓
+
+25%
+
+↓
+
+50%
+
+↓
+
+100%
+```
+
+---
+
+## PHASE 21.6 — Version History
+
+Display:
+
+```text
+v43
+
+10% → 25%
+
+
+v42
+
+5% → 10%
+```
+
+---
+
+## PHASE 21.7 — Rollback Interface
+
+Allow:
+
+```text
+Select Version
+
+↓
+
+Review
+
+↓
+
+Confirm
+
+↓
+
+Rollback
+```
+
+---
+
+## PHASE 21.8 — Audit Viewer
+
+Display:
+
+```text
+WHO
+
+did
+
+WHAT
+
+WHEN
+```
+
+---
+
+# MILESTONE 22 — CONTRACT TESTING
+
+## Goal
+
+Ensure server and SDK compatibility.
+
+---
+
+## PHASE 22.1 — Configuration Contract
+
+Define:
+
+```text
+Configuration Schema
+```
+
+---
+
+## PHASE 22.2 — Valid Fixtures
+
+Create valid:
+
+```text
+Configuration Files
+```
+
+---
+
+## PHASE 22.3 — Invalid Fixtures
+
+Create:
+
+```text
+Missing Fields
+
+Invalid Rules
+
+Invalid Types
+
+Invalid Percentages
+```
+
+---
+
+## PHASE 22.4 — SDK Contract Tests
+
+Every SDK must validate:
+
+```text
+Same Configuration
+
+↓
+
+Same Context
+
+↓
+
+Same Result
+```
+
+---
+
+# MILESTONE 23 — FAILURE TESTING
+
+# IMPORTANT
+
+This milestone is extremely important.
+
+---
+
+## PHASE 23.1 — Server Failure
+
+Scenario:
+
+```text
+Distribution Server
+
+OFFLINE
+```
+
+Expected:
+
+```text
+Use Last Known Good Configuration
+```
+
+---
+
+## PHASE 23.2 — Cache Failure
+
+Scenario:
+
+```text
+Cache
+
+CORRUPTED
+```
+
+Expected:
+
+```text
+Reject Cache
+
+↓
+
+Safe Default
+```
+
+---
+
+## PHASE 23.3 — Invalid Remote Configuration
+
+Scenario:
+
+```text
+Server Sends
+
+Invalid Configuration
+```
+
+Expected:
+
+```text
+Reject
+
+↓
+
+Keep Previous Valid Configuration
+```
+
+---
+
+## PHASE 23.4 — Unknown Flag
+
+Expected:
+
+```text
+Safe Default
+```
+
+---
+
+## PHASE 23.5 — Concurrent Updates
+
+Scenario:
+
+```text
+Developer A
+
+and
+
+Developer B
+```
+
+modify:
+
+```text
+Same Configuration
+```
+
+Expected:
+
+```text
+Conflict Detection
+```
+
+---
+
+# MILESTONE 24 — SECURITY HARDENING
+
+## PHASE 24.1 — Threat Model
+
+Document:
+
+```text
+Assets
+
+Trust Boundaries
+
+Threats
+
+Attackers
+
+Mitigations
+```
+
+---
+
+## PHASE 24.2 — Input Validation
+
+Validate:
+
+- API requests
+- Rules
+- Configuration
+- User attributes
+
+---
+
+## PHASE 24.3 — Secret Protection
+
+Ensure:
+
+```text
+No API Keys
+
+in
+
+Logs
+```
+
+---
+
+## PHASE 24.4 — API Key Security
+
+Implement:
+
+```text
+Create
+
+Rotate
+
+Revoke
+```
+
+---
+
+## PHASE 24.5 — Dependency Security
+
+Run:
+
+```text
+Dependency Audit
+```
+
+in CI.
+
+---
+
+# MILESTONE 25 — PERFORMANCE & LOAD TESTING
+
+## PHASE 25.1 — Local Evaluation Benchmark
+
+Measure:
+
+```text
+Evaluation Latency
+```
+
+---
+
+## PHASE 25.2 — Distribution Load
+
+Test:
+
+```text
+Concurrent SDK Requests
+```
+
+---
+
+## PHASE 25.3 — API Performance
+
+Measure:
+
+```text
+p50
+
+p95
+
+p99
+```
+
+---
+
+## PHASE 25.4 — Performance Report
+
+Document:
+
+- Environment
+- Hardware
+- Dataset
+- Results
+- Limitations
+
+Do not make performance claims without measurements.
+
+---
+
+# MILESTONE 26 — DEPLOYMENT
+
+## PHASE 26.1 — Docker
+
+Containerize:
+
+```text
+Dashboard
+
+Control API
+
+Distribution API
+```
+
+---
+
+## PHASE 26.2 — Local Development
+
+Create:
+
+```text
+Docker Compose
+```
+
+Services:
+
+```text
+PostgreSQL
+
+Control API
+
+Distribution API
+
+Dashboard
+```
+
+---
+
+## PHASE 26.3 — Health Checks
+
+Implement:
+
+```text
+Liveness
+
+Readiness
+
+Database Health
+```
+
+---
+
+## PHASE 26.4 — Production Configuration
+
+Document:
+
+```text
+Environment Variables
+
+Secrets
+
+HTTPS
+
+Database Configuration
+```
+
+---
+
+# MILESTONE 27 — DOCUMENTATION
+
+## PHASE 27.1 — README
+
+Explain:
+
+```text
+What
+
+Why
+
+Architecture
+
+Quick Start
+```
+
+---
+
+## PHASE 27.2 — Architecture
+
+Document:
+
+```text
+Control Plane
+
+Data Plane
+
+SDK
+
+Evaluation Engine
+```
+
+---
+
+## PHASE 27.3 — Evaluation Documentation
+
+Explain:
+
+```text
+Rules
+
+Priority
+
+Hashing
+
+Buckets
+
+Percentage Rollout
+```
+
+---
+
+## PHASE 27.4 — SDK Documentation
+
+Provide:
+
+```text
+Installation
+
+Initialization
+
+Evaluation
+
+Context
+
+Offline Behavior
+```
+
+---
+
+## PHASE 27.5 — Self Hosting
+
+Document:
+
+```text
+Docker
+
+Database
+
+Environment Variables
+
+Deployment
+```
+
+---
+
+## PHASE 27.6 — Architecture Decision Records
+
+Document important decisions.
+
+Example:
+
+```text
+ADR-001
+
+Control Plane vs Data Plane
+
+
+ADR-002
+
+Why Local Evaluation
+
+
+ADR-003
+
+Why Deterministic Hashing
+
+
+ADR-004
+
+Why Immutable Configuration Versions
+
+
+ADR-005
+
+Why Polling Before SSE
+```
+
+---
+
+# MILESTONE 28 — RELEASE READINESS AUDIT
+
+## PHASE 28.1 — Functional Audit
+
+Verify:
+
+- Feature flags
+- Rules
+- Rollouts
+- Versioning
+- Rollback
+- SDKs
+
+---
+
+## PHASE 28.2 — Reliability Audit
+
+Test:
+
+```text
+Network Failure
+
+Server Failure
+
+Cache Failure
+
+Invalid Configuration
+```
+
+---
+
+## PHASE 28.3 — Security Audit
+
+Verify:
+
+```text
+Authentication
+
+RBAC
+
+Tenant Isolation
+
+API Keys
+```
+
+---
+
+## PHASE 28.4 — SDK Compatibility Audit
+
+Verify:
+
+```text
+Flutter
+
+=
+
+JavaScript
+
+=
+
+Node
+```
+
+for equivalent evaluation input.
+
+---
+
+## PHASE 28.5 — Documentation Audit
+
+Verify:
+
+```text
+Fresh Clone
+
+↓
+
+Follow Documentation
+
+↓
+
+System Works
+```
+
+---
+
+# MILESTONE 29 — v1.0.0 RELEASE
+
+## PHASE 29.1 — Release Freeze
+
+Stop:
+
+```text
+New Features
+```
+
+Focus only on:
+
+```text
+Bugs
+
+Tests
+
+Documentation
+```
+
+---
+
+## PHASE 29.2 — Final CI
+
+Run:
+
+```text
+Format
+
+Lint
+
+Type Check
+
+Unit Tests
+
+Integration Tests
+
+Contract Tests
+
+Build
+
+Security Checks
+```
+
+---
+
+## PHASE 29.3 — End-to-End Demonstration
+
+The final demonstration must show:
+
+```text
+1. Create Feature
+
+↓
+
+2. Deploy Application
+   with Feature Disabled
+
+↓
+
+3. Enable for Beta Users
+
+↓
+
+4. Rollout to 5%
+
+↓
+
+5. Increase to 25%
+
+↓
+
+6. Increase to 50%
+
+↓
+
+7. Detect Problem
+
+↓
+
+8. Rollback
+
+↓
+
+9. Application Returns
+   to Previous Behavior
+
+↓
+
+WITHOUT
+
+NEW APPLICATION RELEASE
+```
+
+---
+
+# FINAL v1.0.0 DEFINITION OF DONE
+
+CONTROLPLANE v1.0.0 is ready when:
+
+```text
+✓ Organizations work
+
+✓ Projects work
+
+✓ Environments work
+
+✓ Feature flags work
+
+✓ Typed values work
+
+✓ Rules work
+
+✓ Rule priority works
+
+✓ Percentage rollout works
+
+✓ Rollout is deterministic
+
+✓ Configuration snapshots work
+
+✓ Configuration versions are immutable
+
+✓ Rollback works
+
+✓ SDK distribution works
+
+✓ ETag support works
+
+✓ SDK local evaluation works
+
+✓ SDK caching works
+
+✓ Offline behavior works
+
+✓ Safe defaults work
+
+✓ Flutter SDK works
+
+✓ JavaScript SDK works
+
+✓ Cross-SDK tests pass
+
+✓ Authentication works
+
+✓ RBAC works
+
+✓ Tenant isolation works
+
+✓ API keys work
+
+✓ Audit logs work
+
+✓ CI works
+
+✓ Docker deployment works
+
+✓ Documentation is complete
+```
+
+---
+
+# FINAL ENGINEERING PRINCIPLE
+
+Do not ask:
+
+> "What feature should I add next?"
+
+Ask:
+
+> "What can fail?"
+
+Then ask:
+
+> "What should the system do when it fails?"
+
+The quality of CONTROLPLANE will not be measured by:
+
+```text
+Number of Dashboard Pages
+```
+
+It will be measured by:
+
+```text
+Correctness
+
++
+
+Determinism
+
++
+
+Reliability
+
++
+
+Resilience
+
++
+
+Security
+
++
+
+Testing
+
++
+
+Engineering Decisions
+```
+
+---
+
+# FINAL PROJECT FLOW
+
+```text
+SHIP FEATURE CODE
+        │
+        ▼
+FEATURE DISABLED
+        │
+        ▼
+CREATE FLAG
+        │
+        ▼
+TARGET USERS
+        │
+        ▼
+5% ROLLOUT
+        │
+        ▼
+20% ROLLOUT
+        │
+        ▼
+50% ROLLOUT
+        │
+        ▼
+100% ROLLOUT
+
+OR
+
+        │
+        ▼
+
+PROBLEM DETECTED
+        │
+        ▼
+INSTANT ROLLBACK
+        │
+        ▼
+NO APPLICATION RELEASE REQUIRED
+```
+
+# END OF phase.txt

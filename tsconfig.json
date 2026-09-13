@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["vitest.config.ts", "vitest.workspace.ts", "eslint.config.mjs"],
+  "references": [
+    { "path": "./packages/contracts" },
+    { "path": "./packages/config-model" },
+    { "path": "./packages/hashing" },
+    { "path": "./packages/rule-engine" },
+    { "path": "./packages/rollout-engine" },
+    { "path": "./packages/evaluation-engine" },
+    { "path": "./packages/config-client" },
+    { "path": "./apps/control-api" },
+    { "path": "./apps/distribution-api" },
+    { "path": "./sdks/javascript" },
+    { "path": "./sdks/node" },
+    { "path": "./tests/integration" },
+    { "path": "./tests/contract" }
+  ]
+}

@@ -1,0 +1,14 @@
+CONTROLPLANE — COMPLETE PROJECT SPECIFICATION
+Reference Document: CONTROLPLANE — project.txt.md
+
+Project: CONTROLPLANE
+Category: Developer Infrastructure / Feature Management Platform
+Target Release: v1.0.0
+
+Core Statement:
+CONTROLPLANE is a developer-first feature delivery platform that separates feature deployment from feature release.
+
+For full architectural requirements, models, algorithms, and security guidelines, see:
+- CONTROLPLANE — project.txt.md
+- docs/architecture/product-definition.md
+- docs/architecture/control-vs-data-plane.md

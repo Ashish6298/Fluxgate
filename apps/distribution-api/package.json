@@ -1,0 +1,17 @@
+{
+  "name": "@controlplane/distribution-api",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@controlplane/contracts": "workspace:*",
+    "@controlplane/config-model": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
