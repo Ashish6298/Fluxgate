@@ -265,3 +265,72 @@ export const UpdateFeatureFlagInputSchema = z.object({
   enabled: z.boolean().optional(),
 });
 export type UpdateFeatureFlagInput = z.infer<typeof UpdateFeatureFlagInputSchema>;
+
+// --- Targeting Rule Domain Model (Milestone 1.5) ---
+
+export const TargetingRuleIdSchema = z
+  .string()
+  .uuid({ message: 'Targeting Rule ID must be a valid UUID' });
+
+export const RuleOperatorSchema = z.enum([
+  'EQUALS',
+  'NOT_EQUALS',
+  'CONTAINS',
+  'STARTS_WITH',
+  'ENDS_WITH',
+  'IN',
+  'NOT_IN',
+  'GREATER_THAN',
+  'LESS_THAN',
+  'GREATER_THAN_OR_EQUAL',
+  'LESS_THAN_OR_EQUAL',
+  'equals',
+  'notEquals',
+  'contains',
+  'startsWith',
+  'endsWith',
+  'in',
+  'notIn',
+]);
+export type RuleOperator = z.infer<typeof RuleOperatorSchema>;
+
+export const RuleConditionSchema = z.object({
+  attribute: z.string().trim().min(1, { message: 'Attribute cannot be empty' }),
+  operator: RuleOperatorSchema,
+  value: FeatureFlagValueSchema,
+});
+export type RuleCondition = z.infer<typeof RuleConditionSchema>;
+
+export const TargetingRuleSchema = z.object({
+  id: TargetingRuleIdSchema,
+  featureFlagId: FeatureFlagIdSchema,
+  priority: z.number().int().nonnegative({ message: 'Priority must be a non-negative integer' }),
+  conditions: z
+    .array(RuleConditionSchema)
+    .min(1, { message: 'Rule must have at least one condition' }),
+  value: FeatureFlagValueSchema,
+  enabled: z.boolean(),
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+});
+export type TargetingRule = z.infer<typeof TargetingRuleSchema>;
+
+export const CreateTargetingRuleInputSchema = z.object({
+  featureFlagId: FeatureFlagIdSchema,
+  priority: z.number().int().nonnegative().default(0),
+  conditions: z
+    .array(RuleConditionSchema)
+    .min(1, { message: 'Rule must have at least one condition' }),
+  value: FeatureFlagValueSchema,
+  enabled: z.boolean().default(true),
+});
+export type CreateTargetingRuleInput = z.input<typeof CreateTargetingRuleInputSchema>;
+export type CreateTargetingRuleOutput = z.output<typeof CreateTargetingRuleInputSchema>;
+
+export const UpdateTargetingRuleInputSchema = z.object({
+  priority: z.number().int().nonnegative().optional(),
+  conditions: z.array(RuleConditionSchema).min(1).optional(),
+  value: FeatureFlagValueSchema.optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateTargetingRuleInput = z.infer<typeof UpdateTargetingRuleInputSchema>;

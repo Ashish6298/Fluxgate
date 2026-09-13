@@ -8,14 +8,14 @@ describe('Rule Engine Package', () => {
         id: 'rule_beta',
         priority: 2,
         enabled: true,
-        conditions: [{ attribute: 'country', operator: 'equals', value: 'IN' }],
+        conditions: [{ attribute: 'country', operator: 'equals' as const, value: 'IN' }],
         value: 'beta_version',
       },
       {
         id: 'rule_admin',
         priority: 1,
         enabled: true,
-        conditions: [{ attribute: 'userId', operator: 'equals', value: 'admin_1' }],
+        conditions: [{ attribute: 'userId', operator: 'equals' as const, value: 'admin_1' }],
         value: 'admin_version',
       },
     ];

@@ -190,3 +190,69 @@ interface FeatureFlag {
 2. **Environment-Scoped Key Uniqueness**: The compound tuple `(environmentId, key)` is unique. A flag key `new_checkout` can coexist in `development` (enabled = true) and `production` (enabled = false) without mutual interference.
 3. **Key Format & Stability**: Flag keys must follow `/^[a-z0-9]+([-_][a-z0-9]+)*$/` (lowercase alphanumeric with hyphens or underscores, 2 to 64 chars). Once provisioned, keys are immutable to preserve code references.
 4. **Master Kill-Switch**: When `enabled: false`, the local evaluation engine immediately serves `defaultValue` with reason `FLAG_DISABLED` without evaluating rules or rollouts.
+
+---
+
+## 6. Targeting Rule (Phase 1.5)
+
+### Responsibility
+
+The **Targeting Rule** entity represents a conditional targeting clause evaluated in-memory against a provided evaluation context (e.g. `userId`, `platform`, `country`, `appVersion`, or `customAttributes`).
+
+### Relationship
+
+```text
+FeatureFlag
+  │
+  ├── TargetingRule #0 (Priority 0): IF platform == "android" AND country == "IN" THEN true
+  ├── TargetingRule #1 (Priority 1): IF userId IN ["beta_1", "beta_2"] THEN true
+  └── Default Fallback Value: false
+```
+
+### Schema Definition
+
+```typescript
+type RuleOperator =
+  | 'EQUALS'
+  | 'NOT_EQUALS'
+  | 'CONTAINS'
+  | 'STARTS_WITH'
+  | 'ENDS_WITH'
+  | 'IN'
+  | 'NOT_IN'
+  | 'GREATER_THAN'
+  | 'LESS_THAN'
+  | 'GREATER_THAN_OR_EQUAL'
+  | 'LESS_THAN_OR_EQUAL'
+  | 'equals'
+  | 'notEquals'
+  | 'contains'
+  | 'startsWith'
+  | 'endsWith'
+  | 'in'
+  | 'notIn';
+
+interface RuleCondition {
+  attribute: string; // Context attribute name (e.g., "platform", "country", "userId")
+  operator: RuleOperator; // Match operator
+  value: FeatureFlagValue; // Comparison target value
+}
+
+interface TargetingRule {
+  id: string; // UUID v4 format
+  featureFlagId: string; // Parent FeatureFlag UUID v4
+  priority: number; // Non-negative integer (0 = highest precedence)
+  conditions: RuleCondition[]; // Conjunction of conditions (AND)
+  value: FeatureFlagValue; // Return value when all conditions match
+  enabled: boolean; // Active state of rule
+  createdAt: string; // ISO 8601 UTC timestamp
+  updatedAt: string; // ISO 8601 UTC timestamp
+}
+```
+
+### Key Invariants & Evaluation Semantics
+
+1. **Priority Ordering**: Rules are evaluated strictly in ascending order of `priority` ($0, 1, 2, \dots$). The first matching enabled rule immediately determines the evaluation result (`TARGETING_RULE`).
+2. **Conjunctive Conditions (AND)**: Within a single rule, all conditions must evaluate to `true` for the rule to match.
+3. **Local In-Memory Execution**: Rule evaluation is 100% in-memory and synchronous, executing in $<0.1\text{ms}$ with 0 network calls.
+4. **Flag Scoping**: Every targeting rule belongs strictly to a valid `featureFlagId`.

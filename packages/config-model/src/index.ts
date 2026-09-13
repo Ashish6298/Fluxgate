@@ -43,6 +43,17 @@ import {
   UpdateFeatureFlagInput,
   UpdateFeatureFlagInputSchema,
   isValidFlagValue,
+  TargetingRule,
+  RuleCondition,
+  RuleOperator,
+  TargetingRuleSchema,
+  TargetingRuleIdSchema,
+  RuleConditionSchema,
+  RuleOperatorSchema,
+  CreateTargetingRuleInput,
+  CreateTargetingRuleInputSchema,
+  UpdateTargetingRuleInput,
+  UpdateTargetingRuleInputSchema,
 } from '@controlplane/contracts';
 import { randomUUID } from 'node:crypto';
 
@@ -62,6 +73,11 @@ export {
   type FeatureFlagValue,
   type CreateFeatureFlagInput,
   type UpdateFeatureFlagInput,
+  type TargetingRule,
+  type RuleCondition,
+  type RuleOperator,
+  type CreateTargetingRuleInput,
+  type UpdateTargetingRuleInput,
   FlagTypeSchema,
   OrganizationSchema,
   OrganizationIdSchema,
@@ -90,6 +106,12 @@ export {
   CreateFeatureFlagInputSchema,
   UpdateFeatureFlagInputSchema,
   isValidFlagValue,
+  TargetingRuleSchema,
+  TargetingRuleIdSchema,
+  RuleConditionSchema,
+  RuleOperatorSchema,
+  CreateTargetingRuleInputSchema,
+  UpdateTargetingRuleInputSchema,
 };
 
 // --- Organization Domain Entity & Helpers ---
@@ -573,6 +595,126 @@ export class InMemoryFeatureFlagRepository implements FeatureFlagRepository {
 
   async delete(id: string): Promise<boolean> {
     return this.flags.delete(id);
+  }
+}
+
+// --- Targeting Rule Domain Entity & Helpers ---
+
+export interface CreateTargetingRuleOptions {
+  featureFlagId: string;
+  priority?: number;
+  conditions: RuleCondition[];
+  value: FeatureFlagValue;
+  enabled?: boolean;
+  id?: string;
+  now?: string;
+}
+
+/**
+ * Creates a validated TargetingRule domain model.
+ */
+export function createTargetingRule(options: CreateTargetingRuleOptions): TargetingRule {
+  const parsedInput = CreateTargetingRuleInputSchema.parse({
+    featureFlagId: options.featureFlagId,
+    priority: options.priority ?? 0,
+    conditions: options.conditions,
+    value: options.value,
+    enabled: options.enabled ?? true,
+  });
+  const id = options.id ?? randomUUID();
+  const timestamp = options.now ?? new Date().toISOString();
+
+  return TargetingRuleSchema.parse({
+    id,
+    featureFlagId: parsedInput.featureFlagId,
+    priority: parsedInput.priority,
+    conditions: parsedInput.conditions,
+    value: parsedInput.value,
+    enabled: parsedInput.enabled,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+/**
+ * Immutably updates a TargetingRule (priority, conditions, value, enabled) and increments updatedAt.
+ * Note: Targeting rule ID and featureFlagId are immutable invariants.
+ */
+export function updateTargetingRule(
+  rule: TargetingRule,
+  input: UpdateTargetingRuleInput,
+  now?: string,
+): TargetingRule {
+  const parsed = UpdateTargetingRuleInputSchema.parse(input);
+  const timestamp = now ?? new Date().toISOString();
+
+  return TargetingRuleSchema.parse({
+    ...rule,
+    priority: parsed.priority !== undefined ? parsed.priority : rule.priority,
+    conditions: parsed.conditions !== undefined ? parsed.conditions : rule.conditions,
+    value: parsed.value !== undefined ? parsed.value : rule.value,
+    enabled: parsed.enabled !== undefined ? parsed.enabled : rule.enabled,
+    updatedAt: timestamp,
+  });
+}
+
+export interface TargetingRuleRepository {
+  create(input: CreateTargetingRuleInput, id?: string): Promise<TargetingRule>;
+  findById(id: string): Promise<TargetingRule | null>;
+  listByFeatureFlag(featureFlagId: string): Promise<TargetingRule[]>;
+  update(id: string, input: UpdateTargetingRuleInput): Promise<TargetingRule>;
+  delete(id: string): Promise<boolean>;
+}
+
+/**
+ * In-memory Targeting Rule Repository enforcing:
+ * 1. Global Targeting Rule ID uniqueness
+ * 2. Scoped listing by featureFlagId sorted by priority ascending
+ */
+export class InMemoryTargetingRuleRepository implements TargetingRuleRepository {
+  private rules = new Map<string, TargetingRule>();
+
+  async create(input: CreateTargetingRuleInput, id?: string): Promise<TargetingRule> {
+    const ruleId = id ?? randomUUID();
+    if (this.rules.has(ruleId)) {
+      throw new Error(`Targeting Rule with ID '${ruleId}' already exists`);
+    }
+
+    const rule = createTargetingRule({
+      featureFlagId: input.featureFlagId,
+      priority: input.priority,
+      conditions: input.conditions,
+      value: input.value,
+      enabled: input.enabled,
+      id: ruleId,
+    });
+    this.rules.set(rule.id, rule);
+    return rule;
+  }
+
+  async findById(id: string): Promise<TargetingRule | null> {
+    return this.rules.get(id) ?? null;
+  }
+
+  async listByFeatureFlag(featureFlagId: string): Promise<TargetingRule[]> {
+    return Array.from(this.rules.values())
+      .filter((r) => r.featureFlagId === featureFlagId)
+      .sort((a, b) => a.priority - b.priority);
+  }
+
+  async update(id: string, input: UpdateTargetingRuleInput): Promise<TargetingRule> {
+    const rule = await this.findById(id);
+    if (!rule) {
+      throw new Error(`Targeting Rule with ID '${id}' not found`);
+    }
+
+    const updated = updateTargetingRule(rule, input);
+    this.rules.set(updated.id, updated);
+    return updated;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.rules.delete(id);
   }
 }
 

@@ -227,6 +227,9 @@ importers:
       '@controlplane/hashing':
         specifier: workspace:*
         version: link:../../packages/hashing
+      '@controlplane/rule-engine':
+        specifier: workspace:*
+        version: link:../../packages/rule-engine
       '@controlplane/sdk':
         specifier: workspace:*
         version: link:../../sdks/javascript

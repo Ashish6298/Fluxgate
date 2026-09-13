@@ -1,21 +1,21 @@
-import type { EvaluationContext } from '@controlplane/contracts';
+import type {
+  EvaluationContext,
+  RuleCondition,
+  TargetingRule,
+  RuleOperator,
+} from '@controlplane/contracts';
 
-export type StringOperator =
-  'equals' | 'notEquals' | 'contains' | 'startsWith' | 'endsWith' | 'in' | 'notIn';
-
-export interface Condition {
-  attribute: string;
-  operator: StringOperator | string;
-  value: unknown;
-}
-
-export interface Rule {
-  id: string;
-  priority: number;
-  conditions: Condition[];
-  value: unknown;
-  enabled: boolean;
-}
+export type StringOperator = RuleOperator;
+export type Condition = RuleCondition;
+export type Rule =
+  | TargetingRule
+  | {
+      id: string;
+      priority: number;
+      conditions: RuleCondition[];
+      value: unknown;
+      enabled: boolean;
+    };
 
 export function evaluateCondition(condition: Condition, context: EvaluationContext): boolean {
   const contextRecord = context as Record<string, unknown>;
