@@ -12,11 +12,14 @@
     { "path": "./packages/rollout-engine" },
     { "path": "./packages/evaluation-engine" },
     { "path": "./packages/config-client" },
+    { "path": "./apps/dashboard" },
     { "path": "./apps/control-api" },
     { "path": "./apps/distribution-api" },
     { "path": "./sdks/javascript" },
     { "path": "./sdks/node" },
     { "path": "./tests/integration" },
-    { "path": "./tests/contract" }
+    { "path": "./tests/contract" },
+    { "path": "./tests/compatibility" },
+    { "path": "./tests/load" }
   ]
 }

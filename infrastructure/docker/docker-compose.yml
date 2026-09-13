@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: controlplane-postgres
+    environment:
+      POSTGRES_USER: cp_user
+      POSTGRES_PASSWORD: cp_password
+      POSTGRES_DB: controlplane
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../database/01-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cp_user -d controlplane']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  control-api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.control-api
+    container_name: controlplane-control-api
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://cp_user:cp_password@postgres:5432/controlplane
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  distribution-api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.distribution-api
+    container_name: controlplane-distribution-api
+    environment:
+      PORT: 4001
+      DATABASE_URL: postgres://cp_user:cp_password@postgres:5432/controlplane
+    ports:
+      - '4001:4001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.dashboard
+    container_name: controlplane-dashboard
+    environment:
+      PORT: 3000
+      NEXT_PUBLIC_CONTROL_API_URL: http://localhost:4000
+    ports:
+      - '3000:3000'
+    depends_on:
+      - control-api
+
+volumes:
+  pgdata:

@@ -1,0 +1,15 @@
+FROM node:22-alpine AS builder
+WORKDIR /app
+RUN npm install -g pnpm@9.15.4
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json ./
+COPY packages/ ./packages/
+COPY apps/distribution-api/ ./apps/distribution-api/
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter "./packages/*" --filter "@controlplane/distribution-api" run build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app /app
+EXPOSE 4001
+CMD ["node", "apps/distribution-api/dist/index.js"]

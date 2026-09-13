@@ -72,18 +72,18 @@ CONTROLPLANE separates **feature deployment** from **feature release** across th
 ```text
 controlplane/
 ├── apps/
-│   ├── dashboard/          # Next.js management UI
-│   ├── control-api/        # Fastify / TypeScript Management API
-│   └── distribution-api/  # High-throughput Distribution API
+│   ├── dashboard/          # Next.js management UI (@controlplane/dashboard)
+│   ├── control-api/        # Fastify / TypeScript Management API (@controlplane/control-api)
+│   └── distribution-api/  # High-throughput Distribution API (@controlplane/distribution-api)
 │
 ├── packages/
-│   ├── contracts/          # Shared Zod schemas and TypeScript interfaces
-│   ├── config-model/       # Domain and snapshot data models
-│   ├── hashing/            # Deterministic canonical hashing (10,000 buckets)
-│   ├── rule-engine/        # Context condition & operator evaluation
-│   ├── rollout-engine/     # Percentage rollout & threshold calculation
-│   ├── evaluation-engine/  # Combined in-memory evaluation pipeline
-│   └── config-client/      # SDK configuration store & caching adapters
+│   ├── contracts/          # Shared Zod schemas and TypeScript interfaces (@controlplane/contracts)
+│   ├── config-model/       # Domain and snapshot data models (@controlplane/config-model)
+│   ├── hashing/            # Deterministic canonical hashing (10,000 buckets) (@controlplane/hashing)
+│   ├── rule-engine/        # Context condition & operator evaluation (@controlplane/rule-engine)
+│   ├── rollout-engine/     # Percentage rollout & threshold calculation (@controlplane/rollout-engine)
+│   ├── evaluation-engine/  # Combined in-memory evaluation pipeline (@controlplane/evaluation-engine)
+│   └── config-client/      # SDK configuration store & caching adapters (@controlplane/config-client)
 │
 ├── sdks/
 │   ├── javascript/         # Browser SDK (@controlplane/sdk)
@@ -92,10 +92,23 @@ controlplane/
 │
 ├── tests/
 │   ├── contract/           # Contract validation & golden test vectors
-│   └── integration/        # Cross-package end-to-end integration tests
+│   ├── integration/        # Cross-package end-to-end integration tests
+│   ├── compatibility/      # Cross-SDK hashing equivalence tests
+│   └── load/               # Local evaluation throughput benchmarks
 │
-├── infrastructure/         # Docker Compose, PostgreSQL init scripts
-└── docs/                   # Product definition, ADRs, API & SDK documentation
+├── infrastructure/
+│   ├── docker/             # Dockerfiles & docker-compose.yml
+│   ├── database/           # PostgreSQL initialization scripts
+│   └── deployment/         # Environment templates
+│
+├── docs/
+│   ├── architecture/       # System diagrams, boundaries, DAG & domain specs
+│   ├── decisions/          # Architecture Decision Records (ADRs)
+│   ├── api/                # API specifications
+│   ├── sdk/                # SDK guides
+│   ├── operations/         # Reliability, toolchain & CI pipeline guides
+│   └── reports/            # Milestone & Phase verification reports
+└── scripts/                # Verification, cycle detection & build utilities
 ```
 
 ---
@@ -107,28 +120,37 @@ controlplane/
 - Node.js >= 20.0.0
 - pnpm >= 9.0.0
 
-### Commands
+### Standard Commands
 
 ```bash
-# Install dependencies across all workspaces
+# 1. Install dependencies across all workspaces
 pnpm install
 
-# Build all packages & apps
-pnpm build
+# 2. Build all packages, apps, and SDKs
+pnpm run build
 
-# Run all unit, contract, and integration tests
+# 3. Run all automated tests
 pnpm test
 
-# Run unit tests only
+# 4. Run unit tests only
 pnpm run test:unit
 
-# Run integration tests only
+# 5. Run integration tests only
 pnpm run test:integration
 
-# Typecheck all packages
+# 6. Run contract & golden vector tests
+pnpm run test:contract
+
+# 7. Run cross-SDK compatibility tests
+pnpm run test:compatibility
+
+# 8. Run local evaluation load tests
+pnpm run test:load
+
+# 9. Typecheck all packages
 pnpm run typecheck
 
-# Check formatting and linting
+# 10. Check formatting and linting
 pnpm run format:check
 pnpm run lint
 ```
@@ -137,16 +159,25 @@ pnpm run lint
 
 ## Roadmap & Progress Tracking
 
-| Milestone / Phase                              |             Status             | Key Deliverables                                                                                                                                                                                                                                                        |
-| :--------------------------------------------- | :----------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Milestone 0: Project Foundation**            | :white_check_mark: In Progress | Monorepo setup, packages, toolchain, CI pipeline, architecture docs, ADRs                                                                                                                                                                                               |
-| ├── **Phase 0.1: Product Definition**          |  :white_check_mark: Completed  | [Product Definition Spec](docs/architecture/product-definition.md), Glossary, Non-Goals, Boundaries ([Report](docs/reports/phase-0.1-verification-report.md))                                                                                                           |
-| ├── **Phase 0.2: Control Plane vs Data Plane** |  :white_check_mark: Completed  | [Control vs Data Plane Architecture](docs/architecture/control-vs-data-plane.md), [ADR-001](docs/decisions/ADR-001-control-plane-vs-data-plane.md), [ADR-002](docs/decisions/ADR-002-why-local-evaluation.md) ([Report](docs/reports/phase-0.2-verification-report.md)) |
-| ├── **Phase 0.3: Monorepo Setup**              | :hourglass_flowing_sand: Next  | Complete package boundaries and monorepo structure                                                                                                                                                                                                                      |
-| ├── **Phase 0.4: Development Toolchain**       |  :white_check_mark: Completed  | TypeScript strict, ESLint, Prettier, Vitest                                                                                                                                                                                                                             |
-| └── **Phase 0.5: CI Foundation**               |  :white_check_mark: Completed  | GitHub Actions workflow (`.github/workflows/ci.yml`)                                                                                                                                                                                                                    |
-| **Milestone 1: Core Domain Model**             |     :white_circle: Pending     | Tenant isolation, Organization, Project, Environment, Flag, Rule, Rollout models                                                                                                                                                                                        |
-| **Milestones 2–29**                            |     :white_circle: Pending     | Persistence, APIs, SDKs, Dashboard, Hardening, Release Readiness                                                                                                                                                                                                        |
+| Milestone / Phase                              |            Status             | Key Deliverables                                                                                                                                                                                                                                                        |
+| :--------------------------------------------- | :---------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Milestone 0: Project Foundation**            | :white_check_mark: Completed  | Monorepo setup, packages, toolchain, CI pipeline, architecture docs, ADRs                                                                                                                                                                                               |
+| ├── **Phase 0.1: Product Definition**          | :white_check_mark: Completed  | [Product Definition Spec](docs/architecture/product-definition.md), Glossary, Non-Goals, Boundaries ([Report](docs/reports/phase-0.1-verification-report.md))                                                                                                           |
+| ├── **Phase 0.2: Control Plane vs Data Plane** | :white_check_mark: Completed  | [Control vs Data Plane Architecture](docs/architecture/control-vs-data-plane.md), [ADR-001](docs/decisions/ADR-001-control-plane-vs-data-plane.md), [ADR-002](docs/decisions/ADR-002-why-local-evaluation.md) ([Report](docs/reports/phase-0.2-verification-report.md)) |
+| ├── **Phase 0.3: Monorepo Setup**              | :white_check_mark: Completed  | [Monorepo Structure & DAG](docs/architecture/monorepo-structure.md), 26 branches, 17 workspace packages, 0 cycles ([Report](docs/reports/phase-0.3-verification-report.md))                                                                                             |
+| ├── **Phase 0.4: Development Toolchain**       | :white_check_mark: Completed  | [Toolchain Guide](docs/operations/development-toolchain.md), standard commands (`install`, `build`, `test`, `lint`, `typecheck`) ([Report](docs/reports/phase-0.4-verification-report.md))                                                                              |
+| └── **Phase 0.5: CI Foundation**               | :white_check_mark: Completed  | GitHub Actions workflow (`.github/workflows/ci.yml`), [CI Architecture Guide](docs/operations/ci-pipeline.md) ([Report](docs/reports/phase-0.5-verification-report.md))                                                                                                 |
+| **Milestone 1: Core Domain Model**             | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Complete 8-part core domain models, validation schemas & repos ([Report](docs/reports/milestone-1-verification-report.md))                                                                                      |
+| ├── **Phase 1.1: Organization**                | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Organization schema, validation & unique tenant repo ([Report](docs/reports/phase-1.1-verification-report.md))                                                                                                  |
+| ├── **Phase 1.2: Project**                     | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Project entity, organization scoping & unique stable keys ([Report](docs/reports/phase-1.2-verification-report.md))                                                                                             |
+| ├── **Phase 1.3: Environment**                 | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Environment entity & independent configuration isolation ([Report](docs/reports/phase-1.3-verification-report.md))                                                                                              |
+| ├── **Phase 1.4: Feature Flag**                | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Typed FeatureFlag entity (Boolean, String, Number, JSON) ([Report](docs/reports/phase-1.4-verification-report.md))                                                                                              |
+| ├── **Phase 1.5: Targeting Rule**              | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Rule entity, operators, priority evaluation ([Report](docs/reports/phase-1.5-verification-report.md))                                                                                                           |
+| ├── **Phase 1.6: Rollout**                     | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Rollout entity, percentage bounds, salt & deterministic bucketing ([Report](docs/reports/phase-1.6-verification-report.md))                                                                                     |
+| ├── **Phase 1.7: Configuration Version**       | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Immutable ConfigurationVersion, snapshot checksum & rollback ([Report](docs/reports/phase-1.7-verification-report.md))                                                                                          |
+| └── **Phase 1.8: Audit Event**                 | :white_check_mark: Completed  | [Domain Model Spec](docs/architecture/domain-model.md), Append-only AuditEvent, differential before/after tracking ([Report](docs/reports/phase-1.8-verification-report.md))                                                                                            |
+| **Milestone 2: Database & Persistence**        | :hourglass_flowing_sand: Next | PostgreSQL schema, migrations, relational constraints, foreign keys, transactions & connection pooling                                                                                                                                                                  |
+| **Milestones 3–29**                            |    :white_circle: Pending     | Configuration Engine, Distribution API, Management API, SDKs, Auth, RBAC, Dashboard, Resilience, Release                                                                                                                                                                |
 
 ---
 

@@ -10,14 +10,16 @@ describe('Evaluation Engine Package', () => {
     checksum: 'checksum_mock',
     flags: [
       {
-        id: 'f1',
+        id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44',
+        environmentId: 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
         key: 'dark_mode',
         name: 'Dark Mode',
         type: 'BOOLEAN' as const,
         defaultValue: true,
         enabled: true,
-        createdAt: '2026-01-01',
-        updatedAt: '2026-01-01',
+        rules: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
       },
     ],
   };

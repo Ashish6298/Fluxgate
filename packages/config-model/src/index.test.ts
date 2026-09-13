@@ -11,7 +11,8 @@ describe('Config Model Package', () => {
       checksum: 'sha256_mock_abc123',
       flags: [
         {
-          id: 'flag_1',
+          id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44',
+          environmentId: 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
           key: 'new_checkout',
           name: 'New Checkout Flow',
           type: 'BOOLEAN' as const,

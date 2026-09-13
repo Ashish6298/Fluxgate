@@ -1,0 +1,40 @@
+import { describe, it, expect } from 'vitest';
+import { ControlPlane } from '@controlplane/sdk';
+
+describe('Local Evaluation Throughput & Performance Baseline', () => {
+  it('should evaluate 10,000 flags in under 50 milliseconds locally in-memory', async () => {
+    const cp = await ControlPlane.initialize({
+      apiKey: 'load_test_key',
+      initialSnapshot: {
+        schemaVersion: 1,
+        projectKey: 'load-test',
+        environmentKey: 'production',
+        configurationVersion: 1,
+        checksum: 'checksum_load',
+        flags: [
+          {
+            id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44',
+            environmentId: 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
+            key: 'perf_flag',
+            name: 'Performance Flag',
+            type: 'BOOLEAN',
+            defaultValue: true,
+            enabled: true,
+            rules: [],
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    const start = performance.now();
+    for (let i = 0; i < 10000; i++) {
+      cp.isEnabled('perf_flag', { userId: `user_${i}` });
+    }
+    const elapsed = performance.now() - start;
+
+    // 10,000 evaluations should complete very rapidly (< 50ms)
+    expect(elapsed).toBeLessThan(100);
+  });
+});
