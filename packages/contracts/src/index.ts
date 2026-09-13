@@ -105,3 +105,54 @@ export const UpdateProjectInputSchema = z.object({
   name: ProjectNameSchema,
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInputSchema>;
+
+// --- Environment Domain Model (Milestone 1.3) ---
+
+export const EnvironmentIdSchema = z
+  .string()
+  .uuid({ message: 'Environment ID must be a valid UUID' });
+
+export const EnvironmentKeySchema = z
+  .string()
+  .trim()
+  .min(2, { message: 'Environment key must be at least 2 characters long' })
+  .max(63, { message: 'Environment key cannot exceed 63 characters' })
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+    message:
+      'Environment key must be lowercase alphanumeric and may contain single hyphens (kebab-case)',
+  });
+
+export const EnvironmentNameSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'Environment name cannot be empty' })
+  .max(255, { message: 'Environment name cannot exceed 255 characters' });
+
+export const EnvironmentTypeSchema = z.enum(['DEVELOPMENT', 'STAGING', 'PRODUCTION', 'CUSTOM']);
+export type EnvironmentType = z.infer<typeof EnvironmentTypeSchema>;
+
+export const EnvironmentSchema = z.object({
+  id: EnvironmentIdSchema,
+  projectId: ProjectIdSchema,
+  name: EnvironmentNameSchema,
+  key: EnvironmentKeySchema,
+  type: EnvironmentTypeSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+});
+export type Environment = z.infer<typeof EnvironmentSchema>;
+
+export const CreateEnvironmentInputSchema = z.object({
+  projectId: ProjectIdSchema,
+  name: EnvironmentNameSchema,
+  key: EnvironmentKeySchema,
+  type: EnvironmentTypeSchema.default('CUSTOM'),
+});
+export type CreateEnvironmentInput = z.input<typeof CreateEnvironmentInputSchema>;
+export type CreateEnvironmentOutput = z.output<typeof CreateEnvironmentInputSchema>;
+
+export const UpdateEnvironmentInputSchema = z.object({
+  name: EnvironmentNameSchema.optional(),
+  type: EnvironmentTypeSchema.optional(),
+});
+export type UpdateEnvironmentInput = z.infer<typeof UpdateEnvironmentInputSchema>;

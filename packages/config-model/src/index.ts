@@ -18,6 +18,17 @@ import {
   UpdateProjectInput,
   UpdateProjectInputSchema,
   ProjectKeySchema,
+  Environment,
+  EnvironmentType,
+  EnvironmentSchema,
+  EnvironmentIdSchema,
+  EnvironmentKeySchema,
+  EnvironmentNameSchema,
+  EnvironmentTypeSchema,
+  CreateEnvironmentInput,
+  CreateEnvironmentInputSchema,
+  UpdateEnvironmentInput,
+  UpdateEnvironmentInputSchema,
 } from '@controlplane/contracts';
 import { randomUUID } from 'node:crypto';
 
@@ -28,6 +39,10 @@ export {
   type Project,
   type CreateProjectInput,
   type UpdateProjectInput,
+  type Environment,
+  type EnvironmentType,
+  type CreateEnvironmentInput,
+  type UpdateEnvironmentInput,
   OrganizationSchema,
   OrganizationIdSchema,
   OrganizationNameSchema,
@@ -39,6 +54,13 @@ export {
   CreateProjectInputSchema,
   UpdateProjectInputSchema,
   ProjectKeySchema,
+  EnvironmentSchema,
+  EnvironmentIdSchema,
+  EnvironmentKeySchema,
+  EnvironmentNameSchema,
+  EnvironmentTypeSchema,
+  CreateEnvironmentInputSchema,
+  UpdateEnvironmentInputSchema,
 };
 
 // --- Organization Domain Entity & Helpers ---
@@ -242,6 +264,136 @@ export class InMemoryProjectRepository implements ProjectRepository {
 
   async delete(id: string): Promise<boolean> {
     return this.projects.delete(id);
+  }
+}
+
+// --- Environment Domain Entity & Helpers ---
+
+export interface CreateEnvironmentOptions {
+  projectId: string;
+  name: string;
+  key: string;
+  type?: EnvironmentType;
+  id?: string;
+  now?: string;
+}
+
+/**
+ * Creates a validated Environment domain model.
+ */
+export function createEnvironment(options: CreateEnvironmentOptions): Environment {
+  const parsedInput = CreateEnvironmentInputSchema.parse({
+    projectId: options.projectId,
+    name: options.name,
+    key: options.key,
+    type: options.type ?? 'CUSTOM',
+  });
+  const id = options.id ?? randomUUID();
+  const timestamp = options.now ?? new Date().toISOString();
+
+  return EnvironmentSchema.parse({
+    id,
+    projectId: parsedInput.projectId,
+    name: parsedInput.name,
+    key: parsedInput.key,
+    type: parsedInput.type,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+/**
+ * Immutably updates an Environment's mutable fields (e.g. name, type) and increments updatedAt.
+ * Note: Environment key and projectId are immutable invariants.
+ */
+export function updateEnvironment(
+  env: Environment,
+  input: UpdateEnvironmentInput,
+  now?: string,
+): Environment {
+  const parsed = UpdateEnvironmentInputSchema.parse(input);
+  const timestamp = now ?? new Date().toISOString();
+
+  return EnvironmentSchema.parse({
+    ...env,
+    name: parsed.name ?? env.name,
+    type: parsed.type ?? env.type,
+    updatedAt: timestamp,
+  });
+}
+
+export interface EnvironmentRepository {
+  create(input: CreateEnvironmentInput, id?: string): Promise<Environment>;
+  findById(id: string): Promise<Environment | null>;
+  findByKey(projectId: string, key: string): Promise<Environment | null>;
+  listByProject(projectId: string): Promise<Environment[]>;
+  update(id: string, input: UpdateEnvironmentInput): Promise<Environment>;
+  delete(id: string): Promise<boolean>;
+}
+
+/**
+ * In-memory Environment Repository enforcing:
+ * 1. Global Environment ID uniqueness
+ * 2. Scoped Environment Key uniqueness per Project (projectId + key)
+ */
+export class InMemoryEnvironmentRepository implements EnvironmentRepository {
+  private environments = new Map<string, Environment>();
+
+  async create(input: CreateEnvironmentInput, id?: string): Promise<Environment> {
+    const envId = id ?? randomUUID();
+    if (this.environments.has(envId)) {
+      throw new Error(`Environment with ID '${envId}' already exists`);
+    }
+
+    // Check projectId + key compound uniqueness
+    const existing = await this.findByKey(input.projectId, input.key);
+    if (existing) {
+      throw new Error(
+        `Environment with key '${input.key}' already exists in project '${input.projectId}'`,
+      );
+    }
+
+    const env = createEnvironment({
+      projectId: input.projectId,
+      name: input.name,
+      key: input.key,
+      type: input.type,
+      id: envId,
+    });
+    this.environments.set(env.id, env);
+    return env;
+  }
+
+  async findById(id: string): Promise<Environment | null> {
+    return this.environments.get(id) ?? null;
+  }
+
+  async findByKey(projectId: string, key: string): Promise<Environment | null> {
+    for (const env of this.environments.values()) {
+      if (env.projectId === projectId && env.key === key) {
+        return env;
+      }
+    }
+    return null;
+  }
+
+  async listByProject(projectId: string): Promise<Environment[]> {
+    return Array.from(this.environments.values()).filter((e) => e.projectId === projectId);
+  }
+
+  async update(id: string, input: UpdateEnvironmentInput): Promise<Environment> {
+    const env = await this.findById(id);
+    if (!env) {
+      throw new Error(`Environment with ID '${id}' not found`);
+    }
+
+    const updated = updateEnvironment(env, input);
+    this.environments.set(updated.id, updated);
+    return updated;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.environments.delete(id);
   }
 }
 
