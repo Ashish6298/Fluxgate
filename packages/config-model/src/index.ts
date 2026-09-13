@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  FlagType,
   FlagTypeSchema,
   Organization,
   OrganizationSchema,
@@ -29,10 +30,24 @@ import {
   CreateEnvironmentInputSchema,
   UpdateEnvironmentInput,
   UpdateEnvironmentInputSchema,
+  FeatureFlag,
+  FeatureFlagValue,
+  FeatureFlagSchema,
+  FeatureFlagIdSchema,
+  FeatureFlagKeySchema,
+  FeatureFlagNameSchema,
+  FeatureFlagDescriptionSchema,
+  FeatureFlagValueSchema,
+  CreateFeatureFlagInput,
+  CreateFeatureFlagInputSchema,
+  UpdateFeatureFlagInput,
+  UpdateFeatureFlagInputSchema,
+  isValidFlagValue,
 } from '@controlplane/contracts';
 import { randomUUID } from 'node:crypto';
 
 export {
+  type FlagType,
   type Organization,
   type CreateOrganizationInput,
   type UpdateOrganizationInput,
@@ -43,6 +58,11 @@ export {
   type EnvironmentType,
   type CreateEnvironmentInput,
   type UpdateEnvironmentInput,
+  type FeatureFlag,
+  type FeatureFlagValue,
+  type CreateFeatureFlagInput,
+  type UpdateFeatureFlagInput,
+  FlagTypeSchema,
   OrganizationSchema,
   OrganizationIdSchema,
   OrganizationNameSchema,
@@ -61,6 +81,15 @@ export {
   EnvironmentTypeSchema,
   CreateEnvironmentInputSchema,
   UpdateEnvironmentInputSchema,
+  FeatureFlagSchema,
+  FeatureFlagIdSchema,
+  FeatureFlagKeySchema,
+  FeatureFlagNameSchema,
+  FeatureFlagDescriptionSchema,
+  FeatureFlagValueSchema,
+  CreateFeatureFlagInputSchema,
+  UpdateFeatureFlagInputSchema,
+  isValidFlagValue,
 };
 
 // --- Organization Domain Entity & Helpers ---
@@ -397,20 +426,157 @@ export class InMemoryEnvironmentRepository implements EnvironmentRepository {
   }
 }
 
-// --- Feature Flag & Configuration Snapshot Models ---
+// --- Feature Flag Domain Entity & Helpers ---
 
-export const FeatureFlagModelSchema = z.object({
-  id: z.string(),
-  key: z.string().min(1),
-  name: z.string(),
-  description: z.string().optional(),
-  type: FlagTypeSchema,
-  defaultValue: z.union([z.boolean(), z.string(), z.number(), z.record(z.unknown())]),
-  enabled: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type FeatureFlagModel = z.infer<typeof FeatureFlagModelSchema>;
+export interface CreateFeatureFlagOptions {
+  environmentId: string;
+  key: string;
+  name: string;
+  description?: string;
+  type: FlagType;
+  defaultValue: FeatureFlagValue;
+  enabled?: boolean;
+  id?: string;
+  now?: string;
+}
+
+/**
+ * Creates a validated FeatureFlag domain model.
+ */
+export function createFeatureFlag(options: CreateFeatureFlagOptions): FeatureFlag {
+  const parsedInput = CreateFeatureFlagInputSchema.parse({
+    environmentId: options.environmentId,
+    key: options.key,
+    name: options.name,
+    description: options.description,
+    type: options.type,
+    defaultValue: options.defaultValue,
+    enabled: options.enabled ?? true,
+  });
+  const id = options.id ?? randomUUID();
+  const timestamp = options.now ?? new Date().toISOString();
+
+  return FeatureFlagSchema.parse({
+    id,
+    environmentId: parsedInput.environmentId,
+    key: parsedInput.key,
+    name: parsedInput.name,
+    description: parsedInput.description,
+    type: parsedInput.type,
+    defaultValue: parsedInput.defaultValue,
+    enabled: parsedInput.enabled,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+/**
+ * Immutably updates a FeatureFlag (e.g. name, description, defaultValue, enabled) and increments updatedAt.
+ * Note: Flag key, environmentId, and type are immutable invariants.
+ */
+export function updateFeatureFlag(
+  flag: FeatureFlag,
+  input: UpdateFeatureFlagInput,
+  now?: string,
+): FeatureFlag {
+  const parsed = UpdateFeatureFlagInputSchema.parse(input);
+  const timestamp = now ?? new Date().toISOString();
+
+  const newDefaultValue =
+    parsed.defaultValue !== undefined ? parsed.defaultValue : flag.defaultValue;
+  if (!isValidFlagValue(flag.type, newDefaultValue)) {
+    throw new Error(`defaultValue does not match flag type '${flag.type}'`);
+  }
+
+  return FeatureFlagSchema.parse({
+    ...flag,
+    name: parsed.name ?? flag.name,
+    description: parsed.description !== undefined ? parsed.description : flag.description,
+    defaultValue: newDefaultValue,
+    enabled: parsed.enabled !== undefined ? parsed.enabled : flag.enabled,
+    updatedAt: timestamp,
+  });
+}
+
+export interface FeatureFlagRepository {
+  create(input: CreateFeatureFlagInput, id?: string): Promise<FeatureFlag>;
+  findById(id: string): Promise<FeatureFlag | null>;
+  findByKey(environmentId: string, key: string): Promise<FeatureFlag | null>;
+  listByEnvironment(environmentId: string): Promise<FeatureFlag[]>;
+  update(id: string, input: UpdateFeatureFlagInput): Promise<FeatureFlag>;
+  delete(id: string): Promise<boolean>;
+}
+
+/**
+ * In-memory Feature Flag Repository enforcing:
+ * 1. Global Feature Flag ID uniqueness
+ * 2. Scoped Feature Flag Key uniqueness per Environment (environmentId + key)
+ */
+export class InMemoryFeatureFlagRepository implements FeatureFlagRepository {
+  private flags = new Map<string, FeatureFlag>();
+
+  async create(input: CreateFeatureFlagInput, id?: string): Promise<FeatureFlag> {
+    const flagId = id ?? randomUUID();
+    if (this.flags.has(flagId)) {
+      throw new Error(`Feature Flag with ID '${flagId}' already exists`);
+    }
+
+    // Check environmentId + key compound uniqueness
+    const existing = await this.findByKey(input.environmentId, input.key);
+    if (existing) {
+      throw new Error(
+        `Feature Flag with key '${input.key}' already exists in environment '${input.environmentId}'`,
+      );
+    }
+
+    const flag = createFeatureFlag({
+      environmentId: input.environmentId,
+      key: input.key,
+      name: input.name,
+      description: input.description,
+      type: input.type,
+      defaultValue: input.defaultValue,
+      enabled: input.enabled,
+      id: flagId,
+    });
+    this.flags.set(flag.id, flag);
+    return flag;
+  }
+
+  async findById(id: string): Promise<FeatureFlag | null> {
+    return this.flags.get(id) ?? null;
+  }
+
+  async findByKey(environmentId: string, key: string): Promise<FeatureFlag | null> {
+    for (const flag of this.flags.values()) {
+      if (flag.environmentId === environmentId && flag.key === key) {
+        return flag;
+      }
+    }
+    return null;
+  }
+
+  async listByEnvironment(environmentId: string): Promise<FeatureFlag[]> {
+    return Array.from(this.flags.values()).filter((f) => f.environmentId === environmentId);
+  }
+
+  async update(id: string, input: UpdateFeatureFlagInput): Promise<FeatureFlag> {
+    const flag = await this.findById(id);
+    if (!flag) {
+      throw new Error(`Feature Flag with ID '${id}' not found`);
+    }
+
+    const updated = updateFeatureFlag(flag, input);
+    this.flags.set(updated.id, updated);
+    return updated;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.flags.delete(id);
+  }
+}
+
+// --- Configuration Snapshot Models ---
 
 export const ConfigurationSnapshotSchema = z.object({
   schemaVersion: z.number().int().positive(),
@@ -418,6 +584,6 @@ export const ConfigurationSnapshotSchema = z.object({
   environmentKey: z.string().min(1),
   configurationVersion: z.number().int().nonnegative(),
   checksum: z.string().min(1),
-  flags: z.array(FeatureFlagModelSchema),
+  flags: z.array(FeatureFlagSchema),
 });
 export type ConfigurationSnapshot = z.infer<typeof ConfigurationSnapshotSchema>;

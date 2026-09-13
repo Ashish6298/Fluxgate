@@ -140,3 +140,53 @@ interface Environment {
 2. **Project-Scoped Key Uniqueness**: The compound tuple `(projectId, key)` must be unique. A project cannot have two environments with key `production`, but different projects can each define their own `production` environment.
 3. **Key Stability**: Environment slugs (`key`) are validated kebab-case strings (`/^[a-z0-9]+(-[a-z0-9]+)*$/`, 2 to 63 chars) and remain immutable once provisioned to ensure SDK configuration stability.
 4. **Global ID Uniqueness**: Every environment has a globally unique UUID v4 identifier.
+
+---
+
+## 5. Feature Flag (Phase 1.4)
+
+### Responsibility
+
+The **Feature Flag** entity represents a dynamically controllable feature toggle or typed configuration parameter within an Environment.
+
+### Relationship
+
+```text
+Environment
+  │
+  ├── FeatureFlag: "new_checkout" (Boolean)
+  ├── FeatureFlag: "hero_title" (String)
+  ├── FeatureFlag: "max_items" (Number)
+  └── FeatureFlag: "tier_config" (JSON)
+```
+
+### Schema Definition
+
+```typescript
+type FlagType = 'BOOLEAN' | 'STRING' | 'NUMBER' | 'JSON';
+type FeatureFlagValue = boolean | string | number | Record<string, unknown> | unknown[] | null;
+
+interface FeatureFlag {
+  id: string; // UUID v4 format
+  environmentId: string; // Parent Environment UUID v4
+  key: string; // Identifier slug (snake_case / kebab-case, 2-64 chars)
+  name: string; // Human-readable flag name (1-255 chars)
+  description?: string; // Optional description of flag purpose (max 1024 chars)
+  type: FlagType; // Data type contract (BOOLEAN | STRING | NUMBER | JSON)
+  defaultValue: FeatureFlagValue; // Type-checked default fallback value
+  enabled: boolean; // Master toggle switch (true = enabled, false = disabled)
+  createdAt: string; // ISO 8601 UTC timestamp
+  updatedAt: string; // ISO 8601 UTC timestamp
+}
+```
+
+### Key Invariants & Validation Constraints
+
+1. **Strict Type Matching**: The `defaultValue` must strictly match the declared `type`:
+   - `BOOLEAN`: must be `true` or `false`.
+   - `STRING`: must be a valid UTF-8 string.
+   - `NUMBER`: must be a finite number (`!Number.isNaN(v) && Number.isFinite(v)`).
+   - `JSON`: must be a valid JSON-serializable value (object, array, string, number, boolean, null).
+2. **Environment-Scoped Key Uniqueness**: The compound tuple `(environmentId, key)` is unique. A flag key `new_checkout` can coexist in `development` (enabled = true) and `production` (enabled = false) without mutual interference.
+3. **Key Format & Stability**: Flag keys must follow `/^[a-z0-9]+([-_][a-z0-9]+)*$/` (lowercase alphanumeric with hyphens or underscores, 2 to 64 chars). Once provisioned, keys are immutable to preserve code references.
+4. **Master Kill-Switch**: When `enabled: false`, the local evaluation engine immediately serves `defaultValue` with reason `FLAG_DISABLED` without evaluating rules or rollouts.

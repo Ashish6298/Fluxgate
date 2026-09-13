@@ -13,14 +13,15 @@ describe('Local Evaluation Throughput & Performance Baseline', () => {
         checksum: 'checksum_load',
         flags: [
           {
-            id: 'flag_perf',
+            id: 'd0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44',
+            environmentId: 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33',
             key: 'perf_flag',
             name: 'Performance Flag',
             type: 'BOOLEAN',
             defaultValue: true,
             enabled: true,
-            createdAt: '2026-01-01',
-            updatedAt: '2026-01-01',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
           },
         ],
       },

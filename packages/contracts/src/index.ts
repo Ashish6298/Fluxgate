@@ -25,9 +25,28 @@ export const EvaluationContextSchema = z.object({
 });
 export type EvaluationContext = z.infer<typeof EvaluationContextSchema>;
 
+export const JsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(JsonValueSchema),
+  ]),
+);
+
+export const FeatureFlagValueSchema = z.union([
+  z.boolean(),
+  z.string(),
+  z.number(),
+  JsonValueSchema,
+]);
+export type FeatureFlagValue = z.infer<typeof FeatureFlagValueSchema>;
+
 export const EvaluationResultSchema = z.object({
   flagKey: z.string(),
-  value: z.union([z.boolean(), z.string(), z.number(), z.record(z.unknown())]),
+  value: FeatureFlagValueSchema,
   reason: EvaluationReasonSchema,
   configurationVersion: z.number().optional(),
   matchedRule: z.string().optional(),
@@ -156,3 +175,93 @@ export const UpdateEnvironmentInputSchema = z.object({
   type: EnvironmentTypeSchema.optional(),
 });
 export type UpdateEnvironmentInput = z.infer<typeof UpdateEnvironmentInputSchema>;
+
+// --- Feature Flag Domain Model (Milestone 1.4) ---
+
+export const FeatureFlagIdSchema = z
+  .string()
+  .uuid({ message: 'Feature Flag ID must be a valid UUID' });
+
+export const FeatureFlagKeySchema = z
+  .string()
+  .trim()
+  .min(2, { message: 'Feature flag key must be at least 2 characters long' })
+  .max(64, { message: 'Feature flag key cannot exceed 64 characters' })
+  .regex(/^[a-z0-9]+([-_][a-z0-9]+)*$/, {
+    message:
+      'Feature flag key must be lowercase alphanumeric and may contain hyphens or underscores (snake_case / kebab-case)',
+  });
+
+export const FeatureFlagNameSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'Feature flag name cannot be empty' })
+  .max(255, { message: 'Feature flag name cannot exceed 255 characters' });
+
+export const FeatureFlagDescriptionSchema = z
+  .string()
+  .trim()
+  .max(1024, { message: 'Description cannot exceed 1024 characters' })
+  .optional();
+
+/**
+ * Validates whether a value satisfies the specified FlagType.
+ */
+export function isValidFlagValue(type: FlagType, value: unknown): boolean {
+  switch (type) {
+    case 'BOOLEAN':
+      return typeof value === 'boolean';
+    case 'STRING':
+      return typeof value === 'string';
+    case 'NUMBER':
+      return typeof value === 'number' && !Number.isNaN(value) && Number.isFinite(value);
+    case 'JSON':
+      return value !== undefined && JsonValueSchema.safeParse(value).success;
+    default:
+      return false;
+  }
+}
+
+export const FeatureFlagSchema = z
+  .object({
+    id: FeatureFlagIdSchema,
+    environmentId: EnvironmentIdSchema,
+    key: FeatureFlagKeySchema,
+    name: FeatureFlagNameSchema,
+    description: FeatureFlagDescriptionSchema,
+    type: FlagTypeSchema,
+    defaultValue: FeatureFlagValueSchema,
+    enabled: z.boolean(),
+    createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+    updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+  })
+  .refine((data) => isValidFlagValue(data.type, data.defaultValue), {
+    message: 'defaultValue does not match the specified flag type',
+    path: ['defaultValue'],
+  });
+export type FeatureFlag = z.infer<typeof FeatureFlagSchema>;
+
+export const CreateFeatureFlagInputSchema = z
+  .object({
+    environmentId: EnvironmentIdSchema,
+    key: FeatureFlagKeySchema,
+    name: FeatureFlagNameSchema,
+    description: FeatureFlagDescriptionSchema,
+    type: FlagTypeSchema,
+    defaultValue: FeatureFlagValueSchema,
+    enabled: z.boolean().default(true),
+  })
+  .refine((data) => isValidFlagValue(data.type, data.defaultValue), {
+    message: 'defaultValue does not match the specified flag type',
+    path: ['defaultValue'],
+  });
+export type CreateFeatureFlagInput = z.input<typeof CreateFeatureFlagInputSchema>;
+export type CreateFeatureFlagOutput = z.output<typeof CreateFeatureFlagInputSchema>;
+
+export const UpdateFeatureFlagInputSchema = z.object({
+  name: FeatureFlagNameSchema.optional(),
+  description: FeatureFlagDescriptionSchema,
+  defaultValue: FeatureFlagValueSchema.optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateFeatureFlagInput = z.infer<typeof UpdateFeatureFlagInputSchema>;
