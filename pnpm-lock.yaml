@@ -227,6 +227,9 @@ importers:
       '@controlplane/hashing':
         specifier: workspace:*
         version: link:../../packages/hashing
+      '@controlplane/rollout-engine':
+        specifier: workspace:*
+        version: link:../../packages/rollout-engine
       '@controlplane/rule-engine':
         specifier: workspace:*
         version: link:../../packages/rule-engine

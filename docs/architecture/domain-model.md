@@ -256,3 +256,52 @@ interface TargetingRule {
 2. **Conjunctive Conditions (AND)**: Within a single rule, all conditions must evaluate to `true` for the rule to match.
 3. **Local In-Memory Execution**: Rule evaluation is 100% in-memory and synchronous, executing in $<0.1\text{ms}$ with 0 network calls.
 4. **Flag Scoping**: Every targeting rule belongs strictly to a valid `featureFlagId`.
+
+---
+
+## 7. Rollout (Phase 1.6)
+
+### Responsibility
+
+The **Rollout** entity represents a deterministic percentage-based rollout mechanism used to gradually expose a feature flag to a controlled subset of users (e.g. 10%, 25%, 50%, 100%).
+
+### Relationship
+
+```text
+FeatureFlag
+  │
+  ├── Targeting Rules (Evaluated First)
+  │
+  └── Rollout (Evaluated Second)
+        │
+        ├── Percentage: 25% (2,500 of 10,000 buckets)
+        └── Salt: "v1" (Hashing entropy & cohort re-randomization)
+```
+
+### Schema Definition
+
+```typescript
+interface Rollout {
+  id: string; // UUID v4 format
+  featureFlagId: string; // Parent FeatureFlag UUID v4
+  percentage: number; // Rollout percentage in [0, 100] (e.g., 25)
+  salt: string; // Non-empty hashing salt (e.g., "v1")
+  enabled: boolean; // Active state of percentage rollout
+  createdAt: string; // ISO 8601 UTC timestamp
+  updatedAt: string; // ISO 8601 UTC timestamp
+}
+```
+
+### Key Invariants & Bucketing Mechanics
+
+1. **Deterministic Hashing (No Random Numbers)**:
+   - Canonical hash input: `projectKey:environmentKey:flagKey:userIdentifier:salt`
+   - Algorithm: `SHA-256` digest converted to 32-bit unsigned integer modulo `10000` $\to$ bucket range $[0, 9999]$ ($0.01\%$ granularity).
+   - Evaluation: User is included if `bucket < percentage * 100`.
+2. **Monotonic Cohort Stability**:
+   - As rollout percentage expands ($5\% \to 10\% \to 25\% \to 50\%$), the user's bucket remains invariant; only the threshold increases.
+   - **Guaranteed**: Any user exposed at $25\%$ is guaranteed to remain exposed at $50\%$.
+3. **Cohort Re-Randomization via Salt**:
+   - Updating `salt` (e.g., from `v1` to `v2`) re-hashes all users to independent buckets, enabling a fresh canary cohort without changing the percentage.
+4. **Single Rollout per Feature Flag**:
+   - Each feature flag contains at most one primary percentage rollout configuration.

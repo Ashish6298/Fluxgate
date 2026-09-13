@@ -334,3 +334,45 @@ export const UpdateTargetingRuleInputSchema = z.object({
   enabled: z.boolean().optional(),
 });
 export type UpdateTargetingRuleInput = z.infer<typeof UpdateTargetingRuleInputSchema>;
+
+// --- Rollout Domain Model (Milestone 1.6) ---
+
+export const RolloutIdSchema = z.string().uuid({ message: 'Rollout ID must be a valid UUID' });
+
+export const RolloutPercentageSchema = z
+  .number()
+  .min(0, { message: 'Rollout percentage must be between 0 and 100' })
+  .max(100, { message: 'Rollout percentage must be between 0 and 100' });
+
+export const RolloutSaltSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'Salt cannot be empty' })
+  .max(128, { message: 'Salt cannot exceed 128 characters' });
+
+export const RolloutSchema = z.object({
+  id: RolloutIdSchema,
+  featureFlagId: FeatureFlagIdSchema,
+  percentage: RolloutPercentageSchema,
+  salt: RolloutSaltSchema,
+  enabled: z.boolean(),
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+});
+export type Rollout = z.infer<typeof RolloutSchema>;
+
+export const CreateRolloutInputSchema = z.object({
+  featureFlagId: FeatureFlagIdSchema,
+  percentage: RolloutPercentageSchema,
+  salt: RolloutSaltSchema.default('v1'),
+  enabled: z.boolean().default(true),
+});
+export type CreateRolloutInput = z.input<typeof CreateRolloutInputSchema>;
+export type CreateRolloutOutput = z.output<typeof CreateRolloutInputSchema>;
+
+export const UpdateRolloutInputSchema = z.object({
+  percentage: RolloutPercentageSchema.optional(),
+  salt: RolloutSaltSchema.optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateRolloutInput = z.infer<typeof UpdateRolloutInputSchema>;

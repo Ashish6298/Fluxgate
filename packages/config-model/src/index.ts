@@ -54,6 +54,15 @@ import {
   CreateTargetingRuleInputSchema,
   UpdateTargetingRuleInput,
   UpdateTargetingRuleInputSchema,
+  Rollout,
+  RolloutSchema,
+  RolloutIdSchema,
+  RolloutPercentageSchema,
+  RolloutSaltSchema,
+  CreateRolloutInput,
+  CreateRolloutInputSchema,
+  UpdateRolloutInput,
+  UpdateRolloutInputSchema,
 } from '@controlplane/contracts';
 import { randomUUID } from 'node:crypto';
 
@@ -112,6 +121,15 @@ export {
   RuleOperatorSchema,
   CreateTargetingRuleInputSchema,
   UpdateTargetingRuleInputSchema,
+  type Rollout,
+  type CreateRolloutInput,
+  type UpdateRolloutInput,
+  RolloutSchema,
+  RolloutIdSchema,
+  RolloutPercentageSchema,
+  RolloutSaltSchema,
+  CreateRolloutInputSchema,
+  UpdateRolloutInputSchema,
 };
 
 // --- Organization Domain Entity & Helpers ---
@@ -715,6 +733,127 @@ export class InMemoryTargetingRuleRepository implements TargetingRuleRepository 
 
   async delete(id: string): Promise<boolean> {
     return this.rules.delete(id);
+  }
+}
+
+// --- Rollout Domain Entity & Helpers ---
+
+export interface CreateRolloutOptions {
+  featureFlagId: string;
+  percentage: number;
+  salt?: string;
+  enabled?: boolean;
+  id?: string;
+  now?: string;
+}
+
+/**
+ * Creates a validated Rollout domain model.
+ */
+export function createRollout(options: CreateRolloutOptions): Rollout {
+  const parsedInput = CreateRolloutInputSchema.parse({
+    featureFlagId: options.featureFlagId,
+    percentage: options.percentage,
+    salt: options.salt ?? 'v1',
+    enabled: options.enabled ?? true,
+  });
+  const id = options.id ?? randomUUID();
+  const timestamp = options.now ?? new Date().toISOString();
+
+  return RolloutSchema.parse({
+    id,
+    featureFlagId: parsedInput.featureFlagId,
+    percentage: parsedInput.percentage,
+    salt: parsedInput.salt,
+    enabled: parsedInput.enabled,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+/**
+ * Immutably updates a Rollout (percentage, salt, enabled) and increments updatedAt.
+ * Note: Rollout ID and featureFlagId are immutable invariants.
+ */
+export function updateRollout(rollout: Rollout, input: UpdateRolloutInput, now?: string): Rollout {
+  const parsed = UpdateRolloutInputSchema.parse(input);
+  const timestamp = now ?? new Date().toISOString();
+
+  return RolloutSchema.parse({
+    ...rollout,
+    percentage: parsed.percentage !== undefined ? parsed.percentage : rollout.percentage,
+    salt: parsed.salt !== undefined ? parsed.salt : rollout.salt,
+    enabled: parsed.enabled !== undefined ? parsed.enabled : rollout.enabled,
+    updatedAt: timestamp,
+  });
+}
+
+export interface RolloutRepository {
+  create(input: CreateRolloutInput, id?: string): Promise<Rollout>;
+  findById(id: string): Promise<Rollout | null>;
+  findByFeatureFlagId(featureFlagId: string): Promise<Rollout | null>;
+  update(id: string, input: UpdateRolloutInput): Promise<Rollout>;
+  delete(id: string): Promise<boolean>;
+}
+
+/**
+ * In-memory Rollout Repository enforcing:
+ * 1. Global Rollout ID uniqueness
+ * 2. Scoped single Rollout per Feature Flag
+ */
+export class InMemoryRolloutRepository implements RolloutRepository {
+  private rollouts = new Map<string, Rollout>();
+
+  async create(input: CreateRolloutInput, id?: string): Promise<Rollout> {
+    const rolloutId = id ?? randomUUID();
+    if (this.rollouts.has(rolloutId)) {
+      throw new Error(`Rollout with ID '${rolloutId}' already exists`);
+    }
+
+    const existing = await this.findByFeatureFlagId(input.featureFlagId);
+    if (existing) {
+      throw new Error(
+        `Rollout for Feature Flag '${input.featureFlagId}' already exists (ID: '${existing.id}')`,
+      );
+    }
+
+    const rollout = createRollout({
+      featureFlagId: input.featureFlagId,
+      percentage: input.percentage,
+      salt: input.salt,
+      enabled: input.enabled,
+      id: rolloutId,
+    });
+    this.rollouts.set(rollout.id, rollout);
+    return rollout;
+  }
+
+  async findById(id: string): Promise<Rollout | null> {
+    return this.rollouts.get(id) ?? null;
+  }
+
+  async findByFeatureFlagId(featureFlagId: string): Promise<Rollout | null> {
+    for (const rollout of this.rollouts.values()) {
+      if (rollout.featureFlagId === featureFlagId) {
+        return rollout;
+      }
+    }
+    return null;
+  }
+
+  async update(id: string, input: UpdateRolloutInput): Promise<Rollout> {
+    const rollout = await this.findById(id);
+    if (!rollout) {
+      throw new Error(`Rollout with ID '${id}' not found`);
+    }
+
+    const updated = updateRollout(rollout, input);
+    this.rollouts.set(updated.id, updated);
+    return updated;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.rollouts.delete(id);
   }
 }
 
