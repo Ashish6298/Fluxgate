@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import {
   FlagType,
   FlagTypeSchema,
@@ -63,8 +62,21 @@ import {
   CreateRolloutInputSchema,
   UpdateRolloutInput,
   UpdateRolloutInputSchema,
+  ConfigurationVersion,
+  ConfigurationVersionSchema,
+  ConfigurationVersionIdSchema,
+  ConfigurationVersionNumberSchema,
+  ChecksumSchema,
+  CreatedBySchema,
+  VersionReasonSchema,
+  CreateConfigurationVersionInput,
+  CreateConfigurationVersionInputSchema,
+  ConfigurationSnapshot,
+  ConfigurationSnapshotSchema,
+  SnapshotFlag,
+  SnapshotFlagSchema,
 } from '@controlplane/contracts';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 export {
   type FlagType,
@@ -130,6 +142,19 @@ export {
   RolloutSaltSchema,
   CreateRolloutInputSchema,
   UpdateRolloutInputSchema,
+  type ConfigurationVersion,
+  type CreateConfigurationVersionInput,
+  type ConfigurationSnapshot,
+  type SnapshotFlag,
+  ConfigurationVersionSchema,
+  ConfigurationVersionIdSchema,
+  ConfigurationVersionNumberSchema,
+  ChecksumSchema,
+  CreatedBySchema,
+  VersionReasonSchema,
+  CreateConfigurationVersionInputSchema,
+  ConfigurationSnapshotSchema,
+  SnapshotFlagSchema,
 };
 
 // --- Organization Domain Entity & Helpers ---
@@ -857,14 +882,130 @@ export class InMemoryRolloutRepository implements RolloutRepository {
   }
 }
 
-// --- Configuration Snapshot Models ---
+// --- Configuration Version Domain Entity & Helpers (Milestone 1.7) ---
 
-export const ConfigurationSnapshotSchema = z.object({
-  schemaVersion: z.number().int().positive(),
-  projectKey: z.string().min(1),
-  environmentKey: z.string().min(1),
-  configurationVersion: z.number().int().nonnegative(),
-  checksum: z.string().min(1),
-  flags: z.array(FeatureFlagSchema),
-});
-export type ConfigurationSnapshot = z.infer<typeof ConfigurationSnapshotSchema>;
+/**
+ * Computes deterministic SHA-256 checksum over a JSON snapshot.
+ */
+export function computeSnapshotChecksum(snapshot: object): string {
+  const serialized = JSON.stringify(snapshot, Object.keys(snapshot).sort());
+  return createHash('sha256').update(serialized, 'utf8').digest('hex');
+}
+
+export interface CreateConfigurationVersionOptions {
+  environmentId: string;
+  version: number;
+  snapshot: Record<string, unknown>;
+  checksum: string;
+  createdBy: string;
+  reason?: string;
+  id?: string;
+  now?: string;
+}
+
+/**
+ * Creates an immutable ConfigurationVersion domain model.
+ */
+export function createConfigurationVersion(
+  options: CreateConfigurationVersionOptions,
+): ConfigurationVersion {
+  const parsedInput = CreateConfigurationVersionInputSchema.parse({
+    environmentId: options.environmentId,
+    version: options.version,
+    snapshot: options.snapshot,
+    checksum: options.checksum,
+    createdBy: options.createdBy,
+    reason: options.reason ?? 'Configuration update',
+  });
+  const id = options.id ?? randomUUID();
+  const timestamp = options.now ?? new Date().toISOString();
+
+  const entity: ConfigurationVersion = ConfigurationVersionSchema.parse({
+    id,
+    environmentId: parsedInput.environmentId,
+    version: parsedInput.version,
+    snapshot: parsedInput.snapshot,
+    checksum: parsedInput.checksum,
+    createdBy: parsedInput.createdBy,
+    reason: parsedInput.reason,
+    createdAt: timestamp,
+  });
+
+  // Enforce runtime immutability
+  return Object.freeze(entity);
+}
+
+export interface ConfigurationVersionRepository {
+  create(input: CreateConfigurationVersionInput, id?: string): Promise<ConfigurationVersion>;
+  findById(id: string): Promise<ConfigurationVersion | null>;
+  findByVersion(environmentId: string, version: number): Promise<ConfigurationVersion | null>;
+  getLatest(environmentId: string): Promise<ConfigurationVersion | null>;
+  listByEnvironment(environmentId: string): Promise<ConfigurationVersion[]>;
+}
+
+/**
+ * In-memory ConfigurationVersion Repository enforcing:
+ * 1. Global ID uniqueness
+ * 2. Scoped (environmentId, version) uniqueness
+ * 3. STRICT IMMUTABILITY (no update operations permitted, append-only history)
+ */
+export class InMemoryConfigurationVersionRepository implements ConfigurationVersionRepository {
+  private versions = new Map<string, ConfigurationVersion>();
+
+  async create(input: CreateConfigurationVersionInput, id?: string): Promise<ConfigurationVersion> {
+    const versionId = id ?? randomUUID();
+    if (this.versions.has(versionId)) {
+      throw new Error(`Configuration Version with ID '${versionId}' already exists`);
+    }
+
+    const existing = await this.findByVersion(input.environmentId, input.version);
+    if (existing) {
+      throw new Error(
+        `Configuration version ${input.version} for environment '${input.environmentId}' already exists and is IMMUTABLE`,
+      );
+    }
+
+    const configVersion = createConfigurationVersion({
+      environmentId: input.environmentId,
+      version: input.version,
+      snapshot: input.snapshot,
+      checksum: input.checksum,
+      createdBy: input.createdBy,
+      reason: input.reason,
+      id: versionId,
+    });
+
+    this.versions.set(configVersion.id, configVersion);
+    return configVersion;
+  }
+
+  async findById(id: string): Promise<ConfigurationVersion | null> {
+    return this.versions.get(id) ?? null;
+  }
+
+  async findByVersion(
+    environmentId: string,
+    version: number,
+  ): Promise<ConfigurationVersion | null> {
+    for (const v of this.versions.values()) {
+      if (v.environmentId === environmentId && v.version === version) {
+        return v;
+      }
+    }
+    return null;
+  }
+
+  async getLatest(environmentId: string): Promise<ConfigurationVersion | null> {
+    const envVersions = await this.listByEnvironment(environmentId);
+    if (envVersions.length === 0) {
+      return null;
+    }
+    return envVersions[envVersions.length - 1] ?? null;
+  }
+
+  async listByEnvironment(environmentId: string): Promise<ConfigurationVersion[]> {
+    return Array.from(this.versions.values())
+      .filter((v) => v.environmentId === environmentId)
+      .sort((a, b) => a.version - b.version);
+  }
+}

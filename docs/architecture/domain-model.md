@@ -305,3 +305,49 @@ interface Rollout {
    - Updating `salt` (e.g., from `v1` to `v2`) re-hashes all users to independent buckets, enabling a fresh canary cohort without changing the percentage.
 4. **Single Rollout per Feature Flag**:
    - Each feature flag contains at most one primary percentage rollout configuration.
+
+---
+
+## 8. Configuration Version (Phase 1.7)
+
+### Responsibility
+
+The **Configuration Version** entity represents an immutable, append-only point-in-time snapshot and audit record of an Environment's full configuration payload (flags, rules, and rollouts).
+
+### Relationship
+
+```text
+Environment
+  │
+  ├── v1 (Initial flag creation)
+  ├── v2 (Add targeting rules)
+  ├── v3 (Expand rollout to 25%)
+  └── v4 (Rollback to v1 snapshot)
+```
+
+### Schema Definition
+
+```typescript
+interface ConfigurationVersion {
+  id: string; // UUID v4 format
+  environmentId: string; // Parent Environment UUID v4
+  version: number; // Monotonically increasing positive integer (1, 2, 3, ...)
+  snapshot: ConfigurationSnapshot; // Complete normalized JSON snapshot
+  checksum: string; // SHA-256 integrity checksum over normalized snapshot
+  createdBy: string; // User ID / Actor key who created this version
+  reason: string; // Human-readable change description
+  createdAt: string; // ISO 8601 UTC timestamp
+}
+```
+
+### Key Invariants & Immutability Rules
+
+1. **Strict Immutability**:
+   - Configuration versions are **read-only and immutable**. Once written, a version record can **never** be updated, overwritten, or modified.
+   - Any configuration change (flag toggle, rule edit, rollout change) publishes a **new** incremented version ($v_{\text{next}} = v_{\text{latest}} + 1$).
+2. **Auditability & Safe Rollback**:
+   - Rolling back does **not** erase or mutate history. To rollback from $v43$ to $v41$, the system provisions $v44$ carrying the exact payload from $v41$ with `reason: "Rollback to version 41"`.
+3. **Deterministic Checksums**:
+   - Every version computes a deterministic `SHA-256` checksum over its normalized configuration snapshot, guarding against corruption and tampering.
+4. **Optimistic Concurrency Control (OCC)**:
+   - Modifications supply an expected `baseVersion`. If the environment's current version has advanced, the update is safely rejected with a conflict error.

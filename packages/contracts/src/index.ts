@@ -376,3 +376,84 @@ export const UpdateRolloutInputSchema = z.object({
   enabled: z.boolean().optional(),
 });
 export type UpdateRolloutInput = z.infer<typeof UpdateRolloutInputSchema>;
+
+// --- Configuration Snapshot & Version Domain Model (Milestone 1.7) ---
+
+export const SnapshotFlagSchema = z
+  .object({
+    id: FeatureFlagIdSchema,
+    environmentId: EnvironmentIdSchema,
+    key: FeatureFlagKeySchema,
+    name: FeatureFlagNameSchema,
+    description: FeatureFlagDescriptionSchema,
+    type: FlagTypeSchema,
+    defaultValue: FeatureFlagValueSchema,
+    enabled: z.boolean(),
+    rules: z.array(TargetingRuleSchema).optional().default([]),
+    rollout: RolloutSchema.optional(),
+    createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+    updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+  })
+  .refine((data) => isValidFlagValue(data.type, data.defaultValue), {
+    message: 'defaultValue does not match the specified flag type',
+    path: ['defaultValue'],
+  });
+export type SnapshotFlag = z.infer<typeof SnapshotFlagSchema>;
+
+export const ConfigurationSnapshotSchema = z.object({
+  schemaVersion: z.number().int().positive().default(1),
+  projectKey: z.string().min(1),
+  environmentKey: z.string().min(1),
+  configurationVersion: z.number().int().positive(),
+  checksum: z.string().min(1),
+  flags: z.array(SnapshotFlagSchema),
+});
+export type ConfigurationSnapshot = z.infer<typeof ConfigurationSnapshotSchema>;
+
+export const ConfigurationVersionIdSchema = z
+  .string()
+  .uuid({ message: 'Configuration Version ID must be a valid UUID' });
+
+export const ConfigurationVersionNumberSchema = z
+  .number()
+  .int({ message: 'Version must be an integer' })
+  .positive({ message: 'Version must be a positive integer (>= 1)' });
+
+export const ChecksumSchema = z.string().trim().min(1, { message: 'Checksum cannot be empty' });
+
+export const CreatedBySchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'createdBy cannot be empty' })
+  .max(255, { message: 'createdBy cannot exceed 255 characters' });
+
+export const VersionReasonSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'Reason cannot be empty' })
+  .max(1024, { message: 'Reason cannot exceed 1024 characters' });
+
+export const ConfigurationVersionSchema = z.object({
+  id: ConfigurationVersionIdSchema,
+  environmentId: EnvironmentIdSchema,
+  version: ConfigurationVersionNumberSchema,
+  snapshot: z.record(z.unknown()),
+  checksum: ChecksumSchema,
+  createdBy: CreatedBySchema,
+  reason: VersionReasonSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+});
+export type ConfigurationVersion = z.infer<typeof ConfigurationVersionSchema>;
+
+export const CreateConfigurationVersionInputSchema = z.object({
+  environmentId: EnvironmentIdSchema,
+  version: ConfigurationVersionNumberSchema,
+  snapshot: z.record(z.unknown()),
+  checksum: ChecksumSchema,
+  createdBy: CreatedBySchema,
+  reason: VersionReasonSchema.default('Configuration update'),
+});
+export type CreateConfigurationVersionInput = z.input<typeof CreateConfigurationVersionInputSchema>;
+export type CreateConfigurationVersionOutput = z.output<
+  typeof CreateConfigurationVersionInputSchema
+>;
