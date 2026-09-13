@@ -2,19 +2,24 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - ashish
+      - 'release/**'
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - ashish
 
 jobs:
   validate:
-    name: Verify Codebase
+    name: Continuous Integration & Verification Pipeline
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22 LTS
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -38,20 +43,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Install dependencies
+      - name: Step 1 — Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting
+      - name: Step 2 — Format Check
         run: pnpm run format:check
 
-      - name: Run linter
+      - name: Step 3 — Linting
         run: pnpm run lint
 
-      - name: Check types
+      - name: Step 4 — Type Check
         run: pnpm run typecheck
 
-      - name: Run unit & contract tests
+      - name: Step 5 — Unit, Contract & Integration Tests
         run: pnpm run test
 
-      - name: Build monorepo packages
+      - name: Step 6 — Monorepo Build
         run: pnpm run build
