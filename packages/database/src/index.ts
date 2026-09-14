@@ -99,6 +99,16 @@ export class InMemorySqlEngine implements SqlExecutor {
       return;
     }
 
+    // Check for CREATE INDEX
+    if (/CREATE\s+(?:UNIQUE\s+)?INDEX/i.test(trimmed)) {
+      return;
+    }
+
+    // Check for DROP INDEX
+    if (/DROP\s+INDEX/i.test(trimmed)) {
+      return;
+    }
+
     // Check for INSERT INTO schema_migrations
     const insertMigrationMatch = trimmed.match(
       /INSERT\s+INTO\s+schema_migrations\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i,

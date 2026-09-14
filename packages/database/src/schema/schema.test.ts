@@ -139,4 +139,31 @@ describe('Database Schema Definitions (Phase 2.2)', () => {
     );
     expect(apiKeyOrgCol?.references?.table).toBe('organizations');
   });
+
+  it('should verify explicit database indexes defined across core tables (Phase 2.3)', () => {
+    expect(ProjectsTable.indexes?.map((i) => i.name)).toEqual([
+      'idx_projects_organization_id',
+      'idx_projects_key',
+      'idx_projects_org_key',
+    ]);
+
+    expect(EnvironmentsTable.indexes?.map((i) => i.name)).toEqual([
+      'idx_environments_project_id',
+      'idx_environments_key',
+      'idx_environments_proj_key',
+    ]);
+
+    expect(FeatureFlagsTable.indexes?.map((i) => i.name)).toEqual([
+      'idx_feature_flags_environment_id',
+      'idx_feature_flags_key',
+      'idx_feature_flags_env_key',
+      'idx_feature_flags_enabled',
+    ]);
+
+    expect(ConfigurationVersionsTable.indexes?.map((i) => i.name)).toEqual([
+      'idx_config_versions_env_id',
+      'idx_config_versions_env_version',
+      'idx_config_versions_checksum',
+    ]);
+  });
 });

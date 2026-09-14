@@ -1,5 +1,5 @@
 /**
- * Supported database table names representing the 11 Phase 2.2 core entities
+ * Supported database table names representing the 11 Phase 2.2/2.3 core entities
  */
 export const DatabaseTableNames = [
   'organizations',
@@ -36,6 +36,17 @@ export interface ColumnDefinition {
 }
 
 /**
+ * Database index definition schema
+ */
+export interface IndexDefinition {
+  name: string;
+  tableName: DatabaseTableName;
+  columns: string[];
+  isUnique?: boolean;
+  order?: 'ASC' | 'DESC';
+}
+
+/**
  * Table definition metadata schema
  */
 export interface TableDefinition {
@@ -46,6 +57,7 @@ export interface TableDefinition {
     name: string;
     columns: string[];
   }>;
+  indexes?: IndexDefinition[];
 }
 
 /**
@@ -65,6 +77,13 @@ export const OrganizationsTable: TableDefinition = {
     { name: 'name', type: 'VARCHAR(255)', isNullable: false },
     { name: 'created_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
+  ],
+  indexes: [
+    {
+      name: 'idx_organizations_name',
+      tableName: 'organizations',
+      columns: ['name'],
+    },
   ],
 };
 
@@ -99,6 +118,23 @@ export const ProjectsTable: TableDefinition = {
       columns: ['organization_id', 'key'],
     },
   ],
+  indexes: [
+    {
+      name: 'idx_projects_organization_id',
+      tableName: 'projects',
+      columns: ['organization_id'],
+    },
+    {
+      name: 'idx_projects_key',
+      tableName: 'projects',
+      columns: ['key'],
+    },
+    {
+      name: 'idx_projects_org_key',
+      tableName: 'projects',
+      columns: ['organization_id', 'key'],
+    },
+  ],
 };
 
 /**
@@ -130,6 +166,23 @@ export const EnvironmentsTable: TableDefinition = {
   uniqueConstraints: [
     {
       name: 'uq_proj_env_key',
+      columns: ['project_id', 'key'],
+    },
+  ],
+  indexes: [
+    {
+      name: 'idx_environments_project_id',
+      tableName: 'environments',
+      columns: ['project_id'],
+    },
+    {
+      name: 'idx_environments_key',
+      tableName: 'environments',
+      columns: ['key'],
+    },
+    {
+      name: 'idx_environments_proj_key',
+      tableName: 'environments',
       columns: ['project_id', 'key'],
     },
   ],
@@ -175,6 +228,28 @@ export const FeatureFlagsTable: TableDefinition = {
       columns: ['environment_id', 'key'],
     },
   ],
+  indexes: [
+    {
+      name: 'idx_feature_flags_environment_id',
+      tableName: 'feature_flags',
+      columns: ['environment_id'],
+    },
+    {
+      name: 'idx_feature_flags_key',
+      tableName: 'feature_flags',
+      columns: ['key'],
+    },
+    {
+      name: 'idx_feature_flags_env_key',
+      tableName: 'feature_flags',
+      columns: ['environment_id', 'key'],
+    },
+    {
+      name: 'idx_feature_flags_enabled',
+      tableName: 'feature_flags',
+      columns: ['enabled'],
+    },
+  ],
 };
 
 /**
@@ -209,6 +284,23 @@ export const TargetingRulesTable: TableDefinition = {
     { name: 'enabled', type: 'BOOLEAN', isNullable: false, defaultValue: 'TRUE' },
     { name: 'created_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
+  ],
+  indexes: [
+    {
+      name: 'idx_targeting_rules_feature_flag_id',
+      tableName: 'targeting_rules',
+      columns: ['feature_flag_id'],
+    },
+    {
+      name: 'idx_targeting_rules_priority',
+      tableName: 'targeting_rules',
+      columns: ['feature_flag_id', 'priority'],
+    },
+    {
+      name: 'idx_targeting_rules_enabled',
+      tableName: 'targeting_rules',
+      columns: ['enabled'],
+    },
   ],
 };
 
@@ -249,6 +341,18 @@ export const RolloutsTable: TableDefinition = {
       columns: ['feature_flag_id'],
     },
   ],
+  indexes: [
+    {
+      name: 'idx_rollouts_feature_flag_id',
+      tableName: 'rollouts',
+      columns: ['feature_flag_id'],
+    },
+    {
+      name: 'idx_rollouts_enabled',
+      tableName: 'rollouts',
+      columns: ['enabled'],
+    },
+  ],
 };
 
 /**
@@ -284,6 +388,23 @@ export const ConfigurationVersionsTable: TableDefinition = {
       columns: ['environment_id', 'version'],
     },
   ],
+  indexes: [
+    {
+      name: 'idx_config_versions_env_id',
+      tableName: 'configuration_versions',
+      columns: ['environment_id'],
+    },
+    {
+      name: 'idx_config_versions_env_version',
+      tableName: 'configuration_versions',
+      columns: ['environment_id', 'version'],
+    },
+    {
+      name: 'idx_config_versions_checksum',
+      tableName: 'configuration_versions',
+      columns: ['checksum'],
+    },
+  ],
 };
 
 /**
@@ -314,6 +435,28 @@ export const AuditEventsTable: TableDefinition = {
     { name: 'after', type: 'JSONB', isNullable: true },
     { name: 'created_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
   ],
+  indexes: [
+    {
+      name: 'idx_audit_events_org_id',
+      tableName: 'audit_events',
+      columns: ['organization_id'],
+    },
+    {
+      name: 'idx_audit_events_resource',
+      tableName: 'audit_events',
+      columns: ['resource_type', 'resource_id'],
+    },
+    {
+      name: 'idx_audit_events_actor',
+      tableName: 'audit_events',
+      columns: ['actor_id'],
+    },
+    {
+      name: 'idx_audit_events_created_at',
+      tableName: 'audit_events',
+      columns: ['created_at'],
+    },
+  ],
 };
 
 /**
@@ -334,6 +477,13 @@ export const UsersTable: TableDefinition = {
     { name: 'name', type: 'VARCHAR(255)', isNullable: false },
     { name: 'created_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
+  ],
+  indexes: [
+    {
+      name: 'idx_users_email',
+      tableName: 'users',
+      columns: ['email'],
+    },
   ],
 };
 
@@ -366,6 +516,18 @@ export const RolesTable: TableDefinition = {
   uniqueConstraints: [
     {
       name: 'uq_org_role_name',
+      columns: ['organization_id', 'name'],
+    },
+  ],
+  indexes: [
+    {
+      name: 'idx_roles_org_id',
+      tableName: 'roles',
+      columns: ['organization_id'],
+    },
+    {
+      name: 'idx_roles_org_name',
+      tableName: 'roles',
       columns: ['organization_id', 'name'],
     },
   ],
@@ -408,6 +570,28 @@ export const ApiKeysTable: TableDefinition = {
     },
     { name: 'created_at', type: 'TIMESTAMPTZ', isNullable: false, defaultValue: 'NOW()' },
     { name: 'expires_at', type: 'TIMESTAMPTZ', isNullable: true },
+  ],
+  indexes: [
+    {
+      name: 'idx_api_keys_org_id',
+      tableName: 'api_keys',
+      columns: ['organization_id'],
+    },
+    {
+      name: 'idx_api_keys_env_id',
+      tableName: 'api_keys',
+      columns: ['environment_id'],
+    },
+    {
+      name: 'idx_api_keys_key_hash',
+      tableName: 'api_keys',
+      columns: ['key_hash'],
+    },
+    {
+      name: 'idx_api_keys_prefix',
+      tableName: 'api_keys',
+      columns: ['key_prefix'],
+    },
   ],
 };
 

@@ -65,7 +65,7 @@ describe('Database & Migration System (Phase 2.1)', () => {
 
     // Rollback one
     const rolledBack = await runner.rollback();
-    expect(rolledBack?.version).toBe(5);
+    expect(rolledBack?.version).toBe(6);
 
     const afterRollback = await runner.getAppliedMigrations();
     expect(afterRollback.length).toBe(initialApplied.length - 1);
@@ -73,7 +73,7 @@ describe('Database & Migration System (Phase 2.1)', () => {
     // Full Recreate
     const recreationResult = await runner.recreateDatabase();
     expect(recreationResult.rolledBack).toBe(afterRollback.length);
-    expect(recreationResult.reapplied).toBeGreaterThanOrEqual(5);
+    expect(recreationResult.reapplied).toBeGreaterThanOrEqual(6);
 
     const finalApplied = await runner.getAppliedMigrations();
     expect(finalApplied.length).toBe(initialApplied.length);

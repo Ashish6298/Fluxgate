@@ -49,6 +49,6 @@ describe('PHASE 2.1 CONTRACT: PostgreSQL Setup & Migration Lifecycle', () => {
     // Verify clean recreated state
     const appliedAfter = await runner.getAppliedMigrations();
     expect(appliedAfter.length).toBe(firstRun.length);
-    expect(appliedAfter.map((m) => m.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(appliedAfter.map((m) => m.version)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });
