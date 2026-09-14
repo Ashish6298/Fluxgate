@@ -10,6 +10,7 @@
     "@controlplane/hashing": "workspace:*",
     "@controlplane/rollout-engine": "workspace:*",
     "@controlplane/rule-engine": "workspace:*",
+    "@controlplane/database": "workspace:*",
     "@controlplane/control-api": "workspace:*",
     "@controlplane/distribution-api": "workspace:*",
     "@controlplane/sdk": "workspace:*"

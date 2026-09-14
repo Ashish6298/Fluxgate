@@ -628,7 +628,7 @@ Build reliable persistence with strong constraints.
 ---
 
 ## PHASE 2.1 — PostgreSQL Setup
-
+x
 ### Implementation
 
 Set up:
