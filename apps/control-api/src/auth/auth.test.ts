@@ -94,7 +94,7 @@ describe('User Authentication & Session Management (Phase 3.1)', () => {
     // Call with invalid token -> MUST FAIL
     await expect(
       getSecretResource({ query: 'confidential_metrics' }, 'Bearer invalid_token'),
-    ).rejects.toThrow(/Invalid or expired session token/);
+    ).rejects.toThrow(/Invalid session token/);
   });
 
   it('should successfully log out and invalidate session token', async () => {
@@ -107,8 +107,6 @@ describe('User Authentication & Session Management (Phase 3.1)', () => {
     expect(logoutResult).toBe(true);
 
     // Attempting to verify token after logout must fail
-    await expect(authService.verifyToken(session.token)).rejects.toThrow(
-      /Invalid or expired session token/,
-    );
+    await expect(authService.verifyToken(session.token)).rejects.toThrow(/Invalid session token/);
   });
 });

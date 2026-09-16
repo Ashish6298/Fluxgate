@@ -3,6 +3,7 @@ import type {
   AuthRole,
   AuthorizationRequirement,
   AuthenticatedRequestContext,
+  AuthErrorResponse,
 } from '@controlplane/contracts';
 import type { AuthenticationService } from './auth-service.js';
 
@@ -17,24 +18,50 @@ export type ProtectedHandler<TRequest, TResponse> = (
 
 export class AuthenticationError extends Error {
   public readonly statusCode = 401;
-  constructor(message: string) {
+  public readonly code: string;
+
+  constructor(message: string, code: string = 'UNAUTHORIZED') {
     super(message);
     this.name = 'AuthenticationError';
+    this.code = code;
+  }
+
+  public toResponse(): AuthErrorResponse {
+    return {
+      statusCode: this.statusCode,
+      error: 'Unauthorized',
+      message: this.message,
+      code: this.code,
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 
 export class AuthorizationError extends Error {
   public readonly statusCode = 403;
-  constructor(message: string) {
+  public readonly code: string;
+
+  constructor(message: string, code: string = 'FORBIDDEN') {
     super(message);
     this.name = 'AuthorizationError';
+    this.code = code;
+  }
+
+  public toResponse(): AuthErrorResponse {
+    return {
+      statusCode: this.statusCode,
+      error: 'Forbidden',
+      message: this.message,
+      code: this.code,
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 
 /**
- * PHASE 3.2 Authentication & Authorization Middleware Pipeline
+ * PHASE 3.2 - 3.3 Authentication & Authorization Middleware Pipeline
  *
- * Implements the 4-stage pipeline:
+ * Implements the 4-stage pipeline with strict security baseline enforcement:
  *
  * Request
  *   │
@@ -54,35 +81,57 @@ export class AuthMiddleware {
   constructor(private authService: AuthenticationService) {}
 
   /**
+   * Format any caught error into a secure, sanitized AuthErrorResponse
+   */
+  public static formatErrorResponse(err: unknown): AuthErrorResponse {
+    if (err instanceof AuthenticationError || err instanceof AuthorizationError) {
+      return err.toResponse();
+    }
+
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred';
+    return {
+      statusCode: 500,
+      error: 'InternalServerError',
+      message,
+      code: 'INTERNAL_SERVER_ERROR',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
    * Stage 1: Authentication
    * Extracts and validates the token from the Authorization header.
    */
   public authenticate(authHeader?: string): { token: string; type: 'SESSION_BEARER' | 'API_KEY' } {
     if (!authHeader) {
-      throw new AuthenticationError('Missing Authorization header');
+      throw new AuthenticationError('Missing Authorization header', 'AUTH_HEADER_MISSING');
     }
 
     const parts = authHeader.trim().split(/\s+/);
     if (parts.length !== 2) {
       throw new AuthenticationError(
         'Invalid Authorization header format. Expected Bearer <token> or ApiKey <key>',
+        'AUTH_HEADER_MALFORMED',
       );
     }
 
     const [scheme, credential] = parts;
     if (scheme === 'Bearer') {
       if (!credential || !credential.startsWith('cp_sess_')) {
-        throw new AuthenticationError('Invalid session token format');
+        throw new AuthenticationError('Invalid session token format', 'INVALID_SESSION_TOKEN');
       }
       return { token: credential, type: 'SESSION_BEARER' };
     } else if (scheme === 'ApiKey') {
       if (!credential || !credential.startsWith('cp_live_')) {
-        throw new AuthenticationError('Invalid API key format');
+        throw new AuthenticationError('Invalid API key format', 'INVALID_API_KEY');
       }
       return { token: credential, type: 'API_KEY' };
     }
 
-    throw new AuthenticationError(`Unsupported authorization scheme: ${scheme}`);
+    throw new AuthenticationError(
+      `Unsupported authorization scheme: ${scheme}`,
+      'UNSUPPORTED_AUTH_SCHEME',
+    );
   }
 
   /**
@@ -94,7 +143,8 @@ export class AuthMiddleware {
       return await this.authService.verifyToken(token);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid or expired token';
-      throw new AuthenticationError(msg);
+      const code = msg.includes('expired') ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID';
+      throw new AuthenticationError(msg, code);
     }
   }
 
@@ -117,6 +167,7 @@ export class AuthMiddleware {
       if (!hasAllowedRole) {
         throw new AuthorizationError(
           `Forbidden: Insufficient privileges. Required one of: ${requirements.roles.join(', ')} (current: ${identity.role})`,
+          'INSUFFICIENT_ROLE_PRIVILEGES',
         );
       }
     }
@@ -124,10 +175,16 @@ export class AuthMiddleware {
     // Tenant check
     if (requirements.requireOrganization) {
       if (!identity.organizationId) {
-        throw new AuthorizationError('Forbidden: User does not belong to an active organization');
+        throw new AuthorizationError(
+          'Forbidden: User does not belong to an active organization',
+          'ORGANIZATION_REQUIRED',
+        );
       }
       if (targetOrganizationId && identity.organizationId !== targetOrganizationId) {
-        throw new AuthorizationError('Forbidden: Tenant isolation mismatch');
+        throw new AuthorizationError(
+          'Forbidden: Tenant isolation mismatch',
+          'TENANT_ISOLATION_MISMATCH',
+        );
       }
     }
   }

@@ -1,10 +1,12 @@
 import * as crypto from 'node:crypto';
-import type {
-  AuthIdentity,
-  AuthSession,
-  LoginInput,
-  RegisterUserInput,
-  User,
+import {
+  RegisterUserInputSchema,
+  LoginInputSchema,
+  type AuthIdentity,
+  type AuthSession,
+  type LoginInput,
+  type RegisterUserInput,
+  type User,
 } from '@controlplane/contracts';
 import { createRepositoryContainer, type RepositoryContainer } from '@controlplane/database';
 
@@ -24,16 +26,34 @@ export class AuthenticationService {
   constructor(private repos: RepositoryContainer = createRepositoryContainer()) {}
 
   /**
-   * Securely hash password using PBKDF2 SHA-512
+   * Securely hash password using PBKDF2 SHA-512 with 10,000 iterations
    */
   public hashPassword(password: string, salt: string): string {
     return crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
   }
 
   /**
+   * Constant-time comparison between two hex strings to mitigate timing attacks
+   */
+  public verifyPasswordHash(providedPassword: string, salt: string, expectedHash: string): boolean {
+    const calculatedHash = this.hashPassword(providedPassword, salt);
+    const calculatedBuffer = Buffer.from(calculatedHash, 'hex');
+    const expectedBuffer = Buffer.from(expectedHash, 'hex');
+
+    if (calculatedBuffer.length !== expectedBuffer.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(calculatedBuffer, expectedBuffer);
+  }
+
+  /**
    * Register a new user and create an initial organization if requested
    */
-  public async register(input: RegisterUserInput): Promise<AuthSession> {
+  public async register(rawInput: RegisterUserInput): Promise<AuthSession> {
+    // Validate schema
+    const input = RegisterUserInputSchema.parse(rawInput);
+
     // Check if user already exists
     const existing = await this.repos.users.findByEmail(input.email);
     if (existing) {
@@ -83,21 +103,27 @@ export class AuthenticationService {
   }
 
   /**
-   * Login user with email and password
+   * Login user with email and password using constant-time hash verification
    */
-  public async login(input: LoginInput): Promise<AuthSession> {
+  public async login(rawInput: LoginInput): Promise<AuthSession> {
+    const input = LoginInputSchema.parse(rawInput);
+
     const user = await this.repos.users.findByEmail(input.email);
     if (!user) {
+      // Dummy constant-time hash to mitigate timing side-channel on non-existent accounts
+      const dummySalt = '0'.repeat(32);
+      const dummyHash = '0'.repeat(128);
+      this.verifyPasswordHash(input.password, dummySalt, dummyHash);
       throw new Error('Authentication failed: Invalid email or password');
     }
 
     const record = this.passwords.get(user.id);
     if (!record) {
-      throw new Error('Authentication failed: No credentials found for user');
+      throw new Error('Authentication failed: Invalid email or password');
     }
 
-    const calculatedHash = this.hashPassword(input.password, record.salt);
-    if (calculatedHash !== record.hash) {
+    const isValid = this.verifyPasswordHash(input.password, record.salt, record.hash);
+    if (!isValid) {
       throw new Error('Authentication failed: Invalid email or password');
     }
 
@@ -105,15 +131,16 @@ export class AuthenticationService {
   }
 
   /**
-   * Create authenticated session token
+   * Create authenticated session token with cryptographic randomness
    */
-  private createSession(
+  public createSession(
     user: User,
     organizationId?: string,
-    role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' = 'MEMBER',
+    role: 'OWNER' | 'ADMIN' | 'DEVELOPER' | 'MEMBER' | 'VIEWER' = 'MEMBER',
+    ttlMs: number = 24 * 60 * 60 * 1000,
   ): AuthSession {
     const token = `cp_sess_${crypto.randomBytes(32).toString('hex')}`;
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hour TTL
+    const expiresAt = new Date(Date.now() + ttlMs);
 
     const identity: AuthIdentity = {
       userId: user.id,
@@ -140,9 +167,13 @@ export class AuthenticationService {
    * Verify session token and return authenticated identity
    */
   public async verifyToken(token: string): Promise<AuthIdentity> {
+    if (!token || typeof token !== 'string') {
+      throw new Error('Unauthorized: Missing or malformed token');
+    }
+
     const session = this.activeSessions.get(token);
     if (!session) {
-      throw new Error('Unauthorized: Invalid or expired session token');
+      throw new Error('Unauthorized: Invalid session token');
     }
 
     if (session.expiresAt.getTime() < Date.now()) {

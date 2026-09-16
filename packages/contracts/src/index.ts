@@ -587,12 +587,16 @@ export const CreateApiKeyInputSchema = z.object({
 });
 export type CreateApiKeyInput = z.infer<typeof CreateApiKeyInputSchema>;
 
-// --- Authentication & Session Contracts (Milestone 3.1) ---
+// --- Authentication & Session Contracts (Milestone 3.1 - 3.3) ---
 
 export const PasswordSchema = z
   .string()
   .min(8, { message: 'Password must be at least 8 characters long' })
-  .max(128, { message: 'Password cannot exceed 128 characters' });
+  .max(128, { message: 'Password cannot exceed 128 characters' })
+  .regex(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
+  .regex(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
+  .regex(/[0-9]/, { message: 'Password must contain at least one digit' })
+  .regex(/[^A-Za-z0-9]/, { message: 'Password must contain at least one special character' });
 
 export const RegisterUserInputSchema = z.object({
   email: UserEmailSchema,
@@ -604,7 +608,7 @@ export type RegisterUserInput = z.infer<typeof RegisterUserInputSchema>;
 
 export const LoginInputSchema = z.object({
   email: UserEmailSchema,
-  password: PasswordSchema,
+  password: z.string().min(1, { message: 'Password is required' }),
 });
 export type LoginInput = z.infer<typeof LoginInputSchema>;
 
@@ -641,3 +645,12 @@ export interface AuthenticatedRequestContext {
   tokenType: AuthTokenType;
   token: string;
 }
+
+export const AuthErrorResponseSchema = z.object({
+  statusCode: z.number().int(),
+  error: z.string().min(1),
+  message: z.string().min(1),
+  code: z.string().min(1),
+  timestamp: z.string().datetime(),
+});
+export type AuthErrorResponse = z.infer<typeof AuthErrorResponseSchema>;

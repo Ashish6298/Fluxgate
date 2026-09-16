@@ -66,8 +66,6 @@ describe('PHASE 3.1 CONTRACT: User Authentication, Tokens & Protected Endpoints'
     expect(loggedOut).toBe(true);
 
     // Verification fails
-    await expect(authService.verifyToken(session.token)).rejects.toThrow(
-      /Invalid or expired session token/,
-    );
+    await expect(authService.verifyToken(session.token)).rejects.toThrow(/Invalid session token/);
   });
 });
