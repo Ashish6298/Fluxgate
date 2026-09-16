@@ -403,3 +403,4 @@ export function getDatabaseConfig(
 
 export * from './schema/index.js';
 export * from './transactions/index.js';
+export * from './repositories/index.js';

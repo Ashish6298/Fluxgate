@@ -512,3 +512,77 @@ export const CreateAuditEventInputSchema = z.object({
 });
 export type CreateAuditEventInput = z.input<typeof CreateAuditEventInputSchema>;
 export type CreateAuditEventOutput = z.output<typeof CreateAuditEventInputSchema>;
+
+// --- User, Role, and API Key Contracts (Milestone 2.5 / 3.0) ---
+
+export const UserIdSchema = z.string().uuid({ message: 'User ID must be a valid UUID' });
+export const UserEmailSchema = z
+  .string()
+  .trim()
+  .email({ message: 'Must be a valid email address' });
+export const UserNameSchema = z.string().trim().min(1).max(255);
+
+export const UserSchema = z.object({
+  id: UserIdSchema,
+  email: UserEmailSchema,
+  name: UserNameSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+});
+export type User = z.infer<typeof UserSchema>;
+
+export const CreateUserInputSchema = z.object({
+  email: UserEmailSchema,
+  name: UserNameSchema,
+});
+export type CreateUserInput = z.infer<typeof CreateUserInputSchema>;
+
+export const RoleIdSchema = z.string().uuid({ message: 'Role ID must be a valid UUID' });
+export const RoleNameSchema = z.string().trim().min(1).max(64);
+export const RolePermissionsSchema = z.array(z.string().min(1)).default([]);
+
+export const RoleSchema = z.object({
+  id: RoleIdSchema,
+  organizationId: OrganizationIdSchema,
+  name: RoleNameSchema,
+  description: z.string().max(255).optional(),
+  permissions: RolePermissionsSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+});
+export type Role = z.infer<typeof RoleSchema>;
+
+export const CreateRoleInputSchema = z.object({
+  organizationId: OrganizationIdSchema,
+  name: RoleNameSchema,
+  description: z.string().max(255).optional(),
+  permissions: RolePermissionsSchema,
+});
+export type CreateRoleInput = z.infer<typeof CreateRoleInputSchema>;
+
+export const ApiKeyIdSchema = z.string().uuid({ message: 'API Key ID must be a valid UUID' });
+export const ApiKeyTypeSchema = z.enum(['SERVER', 'CLIENT', 'ADMIN']);
+
+export const ApiKeySchema = z.object({
+  id: ApiKeyIdSchema,
+  organizationId: OrganizationIdSchema,
+  environmentId: EnvironmentIdSchema.optional(),
+  name: z.string().trim().min(1).max(255),
+  keyHash: z.string().min(1),
+  keyPrefix: z.string().min(1).max(16),
+  type: ApiKeyTypeSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  expiresAt: z.string().datetime().optional(),
+});
+export type ApiKey = z.infer<typeof ApiKeySchema>;
+
+export const CreateApiKeyInputSchema = z.object({
+  organizationId: OrganizationIdSchema,
+  environmentId: EnvironmentIdSchema.optional(),
+  name: z.string().trim().min(1).max(255),
+  keyHash: z.string().min(1),
+  keyPrefix: z.string().min(1).max(16),
+  type: ApiKeyTypeSchema,
+  expiresAt: z.string().datetime().optional(),
+});
+export type CreateApiKeyInput = z.infer<typeof CreateApiKeyInputSchema>;
