@@ -512,3 +512,145 @@ export const CreateAuditEventInputSchema = z.object({
 });
 export type CreateAuditEventInput = z.input<typeof CreateAuditEventInputSchema>;
 export type CreateAuditEventOutput = z.output<typeof CreateAuditEventInputSchema>;
+
+// --- User, Role, and API Key Contracts (Milestone 2.5 / 3.0) ---
+
+export const UserIdSchema = z.string().uuid({ message: 'User ID must be a valid UUID' });
+export const UserEmailSchema = z
+  .string()
+  .trim()
+  .email({ message: 'Must be a valid email address' });
+export const UserNameSchema = z.string().trim().min(1).max(255);
+
+export const UserSchema = z.object({
+  id: UserIdSchema,
+  email: UserEmailSchema,
+  name: UserNameSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+});
+export type User = z.infer<typeof UserSchema>;
+
+export const CreateUserInputSchema = z.object({
+  email: UserEmailSchema,
+  name: UserNameSchema,
+});
+export type CreateUserInput = z.infer<typeof CreateUserInputSchema>;
+
+export const RoleIdSchema = z.string().uuid({ message: 'Role ID must be a valid UUID' });
+export const RoleNameSchema = z.string().trim().min(1).max(64);
+export const RolePermissionsSchema = z.array(z.string().min(1)).default([]);
+
+export const RoleSchema = z.object({
+  id: RoleIdSchema,
+  organizationId: OrganizationIdSchema,
+  name: RoleNameSchema,
+  description: z.string().max(255).optional(),
+  permissions: RolePermissionsSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  updatedAt: z.string().datetime({ message: 'updatedAt must be an ISO 8601 datetime' }),
+});
+export type Role = z.infer<typeof RoleSchema>;
+
+export const CreateRoleInputSchema = z.object({
+  organizationId: OrganizationIdSchema,
+  name: RoleNameSchema,
+  description: z.string().max(255).optional(),
+  permissions: RolePermissionsSchema,
+});
+export type CreateRoleInput = z.infer<typeof CreateRoleInputSchema>;
+
+export const ApiKeyIdSchema = z.string().uuid({ message: 'API Key ID must be a valid UUID' });
+export const ApiKeyTypeSchema = z.enum(['SERVER', 'CLIENT', 'ADMIN']);
+
+export const ApiKeySchema = z.object({
+  id: ApiKeyIdSchema,
+  organizationId: OrganizationIdSchema,
+  environmentId: EnvironmentIdSchema.optional(),
+  name: z.string().trim().min(1).max(255),
+  keyHash: z.string().min(1),
+  keyPrefix: z.string().min(1).max(16),
+  type: ApiKeyTypeSchema,
+  createdAt: z.string().datetime({ message: 'createdAt must be an ISO 8601 datetime' }),
+  expiresAt: z.string().datetime().optional(),
+});
+export type ApiKey = z.infer<typeof ApiKeySchema>;
+
+export const CreateApiKeyInputSchema = z.object({
+  organizationId: OrganizationIdSchema,
+  environmentId: EnvironmentIdSchema.optional(),
+  name: z.string().trim().min(1).max(255),
+  keyHash: z.string().min(1),
+  keyPrefix: z.string().min(1).max(16),
+  type: ApiKeyTypeSchema,
+  expiresAt: z.string().datetime().optional(),
+});
+export type CreateApiKeyInput = z.infer<typeof CreateApiKeyInputSchema>;
+
+// --- Authentication & Session Contracts (Milestone 3.1 - 3.3) ---
+
+export const PasswordSchema = z
+  .string()
+  .min(8, { message: 'Password must be at least 8 characters long' })
+  .max(128, { message: 'Password cannot exceed 128 characters' })
+  .regex(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
+  .regex(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
+  .regex(/[0-9]/, { message: 'Password must contain at least one digit' })
+  .regex(/[^A-Za-z0-9]/, { message: 'Password must contain at least one special character' });
+
+export const RegisterUserInputSchema = z.object({
+  email: UserEmailSchema,
+  name: UserNameSchema,
+  password: PasswordSchema,
+  organizationName: OrganizationNameSchema.optional(),
+});
+export type RegisterUserInput = z.infer<typeof RegisterUserInputSchema>;
+
+export const LoginInputSchema = z.object({
+  email: UserEmailSchema,
+  password: z.string().min(1, { message: 'Password is required' }),
+});
+export type LoginInput = z.infer<typeof LoginInputSchema>;
+
+export const AuthSessionSchema = z.object({
+  token: z.string().min(1),
+  user: UserSchema,
+  expiresAt: z.string().datetime({ message: 'expiresAt must be an ISO 8601 datetime' }),
+});
+export type AuthSession = z.infer<typeof AuthSessionSchema>;
+
+export const AuthRoleSchema = z.enum(['OWNER', 'ADMIN', 'DEVELOPER', 'MEMBER', 'VIEWER']);
+export type AuthRole = z.infer<typeof AuthRoleSchema>;
+
+export const AuthIdentitySchema = z.object({
+  userId: UserIdSchema,
+  email: UserEmailSchema,
+  name: UserNameSchema,
+  organizationId: OrganizationIdSchema.optional(),
+  role: AuthRoleSchema.default('MEMBER'),
+});
+export type AuthIdentity = z.infer<typeof AuthIdentitySchema>;
+
+export const AuthTokenTypeSchema = z.enum(['SESSION_BEARER', 'API_KEY']);
+export type AuthTokenType = z.infer<typeof AuthTokenTypeSchema>;
+
+export interface AuthorizationRequirement {
+  roles?: AuthRole[];
+  permissions?: string[];
+  requireOrganization?: boolean;
+}
+
+export interface AuthenticatedRequestContext {
+  identity: AuthIdentity;
+  tokenType: AuthTokenType;
+  token: string;
+}
+
+export const AuthErrorResponseSchema = z.object({
+  statusCode: z.number().int(),
+  error: z.string().min(1),
+  message: z.string().min(1),
+  code: z.string().min(1),
+  timestamp: z.string().datetime(),
+});
+export type AuthErrorResponse = z.infer<typeof AuthErrorResponseSchema>;

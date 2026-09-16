@@ -7,3 +7,4 @@ export function getControlApiInfo() {
     status: 'operational',
   };
 }
+export * from './auth/index.js';
