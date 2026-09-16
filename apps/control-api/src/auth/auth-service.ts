@@ -78,7 +78,8 @@ export class AuthenticationService {
     }
 
     // Generate Session
-    return this.createSession(user, organizationId, 'OWNER');
+    const userRole = input.organizationName ? 'OWNER' : 'MEMBER';
+    return this.createSession(user, organizationId, userRole);
   }
 
   /**

@@ -615,11 +615,29 @@ export const AuthSessionSchema = z.object({
 });
 export type AuthSession = z.infer<typeof AuthSessionSchema>;
 
+export const AuthRoleSchema = z.enum(['OWNER', 'ADMIN', 'DEVELOPER', 'MEMBER', 'VIEWER']);
+export type AuthRole = z.infer<typeof AuthRoleSchema>;
+
 export const AuthIdentitySchema = z.object({
   userId: UserIdSchema,
   email: UserEmailSchema,
   name: UserNameSchema,
   organizationId: OrganizationIdSchema.optional(),
-  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']).default('MEMBER'),
+  role: AuthRoleSchema.default('MEMBER'),
 });
 export type AuthIdentity = z.infer<typeof AuthIdentitySchema>;
+
+export const AuthTokenTypeSchema = z.enum(['SESSION_BEARER', 'API_KEY']);
+export type AuthTokenType = z.infer<typeof AuthTokenTypeSchema>;
+
+export interface AuthorizationRequirement {
+  roles?: AuthRole[];
+  permissions?: string[];
+  requireOrganization?: boolean;
+}
+
+export interface AuthenticatedRequestContext {
+  identity: AuthIdentity;
+  tokenType: AuthTokenType;
+  token: string;
+}
