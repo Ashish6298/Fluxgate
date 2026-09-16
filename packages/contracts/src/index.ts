@@ -586,3 +586,40 @@ export const CreateApiKeyInputSchema = z.object({
   expiresAt: z.string().datetime().optional(),
 });
 export type CreateApiKeyInput = z.infer<typeof CreateApiKeyInputSchema>;
+
+// --- Authentication & Session Contracts (Milestone 3.1) ---
+
+export const PasswordSchema = z
+  .string()
+  .min(8, { message: 'Password must be at least 8 characters long' })
+  .max(128, { message: 'Password cannot exceed 128 characters' });
+
+export const RegisterUserInputSchema = z.object({
+  email: UserEmailSchema,
+  name: UserNameSchema,
+  password: PasswordSchema,
+  organizationName: OrganizationNameSchema.optional(),
+});
+export type RegisterUserInput = z.infer<typeof RegisterUserInputSchema>;
+
+export const LoginInputSchema = z.object({
+  email: UserEmailSchema,
+  password: PasswordSchema,
+});
+export type LoginInput = z.infer<typeof LoginInputSchema>;
+
+export const AuthSessionSchema = z.object({
+  token: z.string().min(1),
+  user: UserSchema,
+  expiresAt: z.string().datetime({ message: 'expiresAt must be an ISO 8601 datetime' }),
+});
+export type AuthSession = z.infer<typeof AuthSessionSchema>;
+
+export const AuthIdentitySchema = z.object({
+  userId: UserIdSchema,
+  email: UserEmailSchema,
+  name: UserNameSchema,
+  organizationId: OrganizationIdSchema.optional(),
+  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']).default('MEMBER'),
+});
+export type AuthIdentity = z.infer<typeof AuthIdentitySchema>;
