@@ -537,6 +537,44 @@ export const CreateUserInputSchema = z.object({
 });
 export type CreateUserInput = z.infer<typeof CreateUserInputSchema>;
 
+// --- Role & Permission Matrix Domain Model (Milestone 4.1 - 4.2) ---
+
+export const StandardActionSchema = z.enum([
+  'VIEW_FLAGS',
+  'CREATE_FLAGS',
+  'MODIFY_FLAGS',
+  'PRODUCTION_ROLLOUT',
+  'ROLLBACK',
+  'DELETE_PROJECT',
+  'MANAGE_USERS',
+]);
+export type StandardAction = z.infer<typeof StandardActionSchema>;
+
+export const STANDARD_ACTIONS = {
+  VIEW_FLAGS: 'VIEW_FLAGS',
+  CREATE_FLAGS: 'CREATE_FLAGS',
+  MODIFY_FLAGS: 'MODIFY_FLAGS',
+  PRODUCTION_ROLLOUT: 'PRODUCTION_ROLLOUT',
+  ROLLBACK: 'ROLLBACK',
+  DELETE_PROJECT: 'DELETE_PROJECT',
+  MANAGE_USERS: 'MANAGE_USERS',
+} as const;
+
+export type PermissionDecision = 'ALLOW' | 'DENY' | 'POLICY_REQUIRED';
+
+export interface PermissionPolicyContext {
+  environmentType?: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
+  allowDeveloperProductionRollout?: boolean;
+}
+
+export interface PermissionEvaluationResult {
+  decision: PermissionDecision;
+  allowed: boolean;
+  role: StandardRole;
+  action: StandardAction;
+  reason: string;
+}
+
 export const RoleIdSchema = z.string().uuid({ message: 'Role ID must be a valid UUID' });
 export const StandardRoleSchema = z.enum(['OWNER', 'ADMIN', 'DEVELOPER', 'VIEWER']);
 export type StandardRole = z.infer<typeof StandardRoleSchema>;

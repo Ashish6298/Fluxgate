@@ -95,6 +95,12 @@ import {
   StandardRoleSchema,
   STANDARD_ROLES,
   STANDARD_ROLE_METADATA,
+  StandardAction,
+  StandardActionSchema,
+  STANDARD_ACTIONS,
+  PermissionDecision,
+  PermissionPolicyContext,
+  PermissionEvaluationResult,
 } from '@controlplane/contracts';
 import { randomUUID, createHash } from 'node:crypto';
 
@@ -1269,4 +1275,161 @@ export class InMemoryRoleRepository implements RoleRepository {
   async delete(id: string): Promise<boolean> {
     return this.roles.delete(id);
   }
+}
+
+// --- Permission Matrix Domain Model (Milestone 4.2) ---
+
+export {
+  type StandardAction,
+  type PermissionDecision,
+  type PermissionPolicyContext,
+  type PermissionEvaluationResult,
+  StandardActionSchema,
+  STANDARD_ACTIONS,
+};
+
+/**
+ * Evaluates whether a role is authorized to perform a given action according to the Phase 4.2 Permission Matrix.
+ *
+ * Matrix:
+ *                      Owner Admin Developer Viewer
+ *  View Flags           YES   YES     YES      YES
+ *  Create Flags         YES   YES     YES      NO
+ *  Modify Flags         YES   YES     YES      NO
+ *  Production Rollout   YES   YES     POLICY   NO
+ *  Rollback             YES   YES     YES      NO
+ *  Delete Project       YES   NO      NO       NO
+ *  Manage Users         YES   YES     NO       NO
+ */
+export function evaluatePermission(
+  role: StandardRole,
+  action: StandardAction,
+  context?: PermissionPolicyContext,
+): PermissionEvaluationResult {
+  const validatedRole = StandardRoleSchema.parse(role);
+  const validatedAction = StandardActionSchema.parse(action);
+
+  // OWNER has absolute authority across all actions
+  if (validatedRole === 'OWNER') {
+    return {
+      decision: 'ALLOW',
+      allowed: true,
+      role: validatedRole,
+      action: validatedAction,
+      reason: 'Owner has full organization privileges',
+    };
+  }
+
+  // DELETE_PROJECT is strictly restricted to OWNER
+  if (validatedAction === 'DELETE_PROJECT') {
+    return {
+      decision: 'DENY',
+      allowed: false,
+      role: validatedRole,
+      action: validatedAction,
+      reason: 'Only Owner role is authorized to delete projects',
+    };
+  }
+
+  // VIEWER has read-only access (VIEW_FLAGS only)
+  if (validatedRole === 'VIEWER') {
+    if (validatedAction === 'VIEW_FLAGS') {
+      return {
+        decision: 'ALLOW',
+        allowed: true,
+        role: validatedRole,
+        action: validatedAction,
+        reason: 'Viewer has read-only access to flags',
+      };
+    }
+    return {
+      decision: 'DENY',
+      allowed: false,
+      role: validatedRole,
+      action: validatedAction,
+      reason: `Viewer is not authorized to perform ${validatedAction}`,
+    };
+  }
+
+  // ADMIN has full operational privileges across all actions (except DELETE_PROJECT)
+  if (validatedRole === 'ADMIN') {
+    return {
+      decision: 'ALLOW',
+      allowed: true,
+      role: validatedRole,
+      action: validatedAction,
+      reason: 'Admin has operational authority',
+    };
+  }
+
+  // DEVELOPER evaluation
+  if (validatedRole === 'DEVELOPER') {
+    if (validatedAction === 'MANAGE_USERS') {
+      return {
+        decision: 'DENY',
+        allowed: false,
+        role: validatedRole,
+        action: validatedAction,
+        reason: 'Developer cannot manage users',
+      };
+    }
+
+    if (validatedAction === 'PRODUCTION_ROLLOUT') {
+      const isProduction = context?.environmentType === 'PRODUCTION';
+      if (isProduction) {
+        if (context?.allowDeveloperProductionRollout) {
+          return {
+            decision: 'ALLOW',
+            allowed: true,
+            role: validatedRole,
+            action: validatedAction,
+            reason: 'Developer authorized by production rollout policy override',
+          };
+        }
+        return {
+          decision: 'POLICY_REQUIRED',
+          allowed: false,
+          role: validatedRole,
+          action: validatedAction,
+          reason: 'Developer rollout to Production requires explicit policy approval',
+        };
+      }
+      // Non-production rollout
+      return {
+        decision: 'ALLOW',
+        allowed: true,
+        role: validatedRole,
+        action: validatedAction,
+        reason: 'Developer authorized for non-production rollout',
+      };
+    }
+
+    // VIEW_FLAGS, CREATE_FLAGS, MODIFY_FLAGS, ROLLBACK
+    return {
+      decision: 'ALLOW',
+      allowed: true,
+      role: validatedRole,
+      action: validatedAction,
+      reason: `Developer is authorized for ${validatedAction}`,
+    };
+  }
+
+  return {
+    decision: 'DENY',
+    allowed: false,
+    role: validatedRole,
+    action: validatedAction,
+    reason: 'Unrecognized role or permission boundary',
+  };
+}
+
+/**
+ * Convenient boolean check for permission evaluation
+ */
+export function hasPermission(
+  role: StandardRole,
+  action: StandardAction,
+  context?: PermissionPolicyContext,
+): boolean {
+  return evaluatePermission(role, action, context).allowed;
 }
