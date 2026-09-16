@@ -44,15 +44,45 @@ import type {
   RepositoryContainer,
 } from './interfaces.js';
 
+export interface DatabaseStorage {
+  organizations: Map<string, Organization>;
+  projects: Map<string, Project>;
+  environments: Map<string, Environment>;
+  featureFlags: Map<string, FeatureFlag>;
+  targetingRules: Map<string, TargetingRule>;
+  rollouts: Map<string, Rollout>;
+  configurationVersions: Map<string, ConfigurationVersion>;
+  auditEvents: Map<string, AuditEvent>;
+  users: Map<string, User>;
+  roles: Map<string, Role>;
+  apiKeys: Map<string, ApiKey>;
+}
+
+export function createDatabaseStorage(): DatabaseStorage {
+  return {
+    organizations: new Map(),
+    projects: new Map(),
+    environments: new Map(),
+    featureFlags: new Map(),
+    targetingRules: new Map(),
+    rollouts: new Map(),
+    configurationVersions: new Map(),
+    auditEvents: new Map(),
+    users: new Map(),
+    roles: new Map(),
+    apiKeys: new Map(),
+  };
+}
+
 export class PostgresOrganizationRepository implements OrganizationRepository {
-  private store = new Map<string, Organization>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<Organization | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.organizations.get(id) ?? null;
   }
 
   async findByName(name: string): Promise<Organization | null> {
-    for (const org of this.store.values()) {
+    for (const org of this.storage.organizations.values()) {
       if (org.name === name) return org;
     }
     return null;
@@ -66,40 +96,106 @@ export class PostgresOrganizationRepository implements OrganizationRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(org.id, org);
+    this.storage.organizations.set(org.id, org);
     return org;
   }
 
   async update(id: string, input: UpdateOrganizationInput): Promise<Organization | null> {
-    const existing = this.store.get(id);
+    const existing = this.storage.organizations.get(id);
     if (!existing) return null;
     const updated: Organization = {
       ...existing,
       name: input.name ?? existing.name,
       updatedAt: new Date().toISOString(),
     };
-    this.store.set(id, updated);
+    this.storage.organizations.set(id, updated);
     return updated;
   }
 
   async delete(id: string): Promise<boolean> {
-    return this.store.delete(id);
+    const existed = this.storage.organizations.delete(id);
+    if (existed) {
+      // Cascading delete for projects & related hierarchy
+      const projectIdsToDelete: string[] = [];
+      for (const proj of this.storage.projects.values()) {
+        if (proj.organizationId === id) {
+          projectIdsToDelete.push(proj.id);
+        }
+      }
+      for (const projId of projectIdsToDelete) {
+        this.storage.projects.delete(projId);
+        // Cascade to environments
+        const envIdsToDelete: string[] = [];
+        for (const env of this.storage.environments.values()) {
+          if (env.projectId === projId) {
+            envIdsToDelete.push(env.id);
+          }
+        }
+        for (const envId of envIdsToDelete) {
+          this.storage.environments.delete(envId);
+          // Cascade to flags
+          const flagIdsToDelete: string[] = [];
+          for (const flag of this.storage.featureFlags.values()) {
+            if (flag.environmentId === envId) {
+              flagIdsToDelete.push(flag.id);
+            }
+          }
+          for (const flagId of flagIdsToDelete) {
+            this.storage.featureFlags.delete(flagId);
+            // Cascade rules & rollouts
+            for (const rule of [...this.storage.targetingRules.values()]) {
+              if (rule.featureFlagId === flagId) {
+                this.storage.targetingRules.delete(rule.id);
+              }
+            }
+            for (const roll of [...this.storage.rollouts.values()]) {
+              if (roll.featureFlagId === flagId) {
+                this.storage.rollouts.delete(roll.id);
+              }
+            }
+          }
+          // Cascade versions
+          for (const ver of [...this.storage.configurationVersions.values()]) {
+            if (ver.environmentId === envId) {
+              this.storage.configurationVersions.delete(ver.id);
+            }
+          }
+        }
+      }
+      // Cascade roles & api keys
+      for (const role of [...this.storage.roles.values()]) {
+        if (role.organizationId === id) {
+          this.storage.roles.delete(role.id);
+        }
+      }
+      for (const key of [...this.storage.apiKeys.values()]) {
+        if (key.organizationId === id) {
+          this.storage.apiKeys.delete(key.id);
+        }
+      }
+      for (const audit of [...this.storage.auditEvents.values()]) {
+        if (audit.organizationId === id) {
+          this.storage.auditEvents.delete(audit.id);
+        }
+      }
+    }
+    return existed;
   }
 
   async listAll(): Promise<Organization[]> {
-    return Array.from(this.store.values());
+    return Array.from(this.storage.organizations.values());
   }
 }
 
 export class PostgresProjectRepository implements ProjectRepository {
-  private store = new Map<string, Project>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<Project | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.projects.get(id) ?? null;
   }
 
   async findByKey(organizationId: string, key: string): Promise<Project | null> {
-    for (const proj of this.store.values()) {
+    for (const proj of this.storage.projects.values()) {
       if (proj.organizationId === organizationId && proj.key === key) {
         return proj;
       }
@@ -108,6 +204,22 @@ export class PostgresProjectRepository implements ProjectRepository {
   }
 
   async create(input: CreateProjectInput): Promise<Project> {
+    // Foreign key check
+    if (!this.storage.organizations.has(input.organizationId)) {
+      throw new Error(
+        `Foreign key constraint failed: Organization ${input.organizationId} does not exist`,
+      );
+    }
+
+    // Unique constraint: organizationId + key
+    for (const proj of this.storage.projects.values()) {
+      if (proj.organizationId === input.organizationId && proj.key === input.key) {
+        throw new Error(
+          `Unique constraint violated: Project key '${input.key}' already exists in organization`,
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const project: Project = {
       id: crypto.randomUUID(),
@@ -117,44 +229,59 @@ export class PostgresProjectRepository implements ProjectRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(project.id, project);
+    this.storage.projects.set(project.id, project);
     return project;
   }
 
   async update(id: string, input: UpdateProjectInput): Promise<Project | null> {
-    const existing = this.store.get(id);
+    const existing = this.storage.projects.get(id);
     if (!existing) return null;
     const updated: Project = {
       ...existing,
       name: input.name ?? existing.name,
       updatedAt: new Date().toISOString(),
     };
-    this.store.set(id, updated);
+    this.storage.projects.set(id, updated);
     return updated;
   }
 
   async delete(id: string): Promise<boolean> {
-    return this.store.delete(id);
+    const existed = this.storage.projects.delete(id);
+    if (existed) {
+      // Cascade to environments
+      const envIdsToDelete: string[] = [];
+      for (const env of this.storage.environments.values()) {
+        if (env.projectId === id) {
+          envIdsToDelete.push(env.id);
+        }
+      }
+      for (const envId of envIdsToDelete) {
+        this.storage.environments.delete(envId);
+      }
+    }
+    return existed;
   }
 
   async listAll(): Promise<Project[]> {
-    return Array.from(this.store.values());
+    return Array.from(this.storage.projects.values());
   }
 
   async listByOrganization(organizationId: string): Promise<Project[]> {
-    return Array.from(this.store.values()).filter((p) => p.organizationId === organizationId);
+    return Array.from(this.storage.projects.values()).filter(
+      (p) => p.organizationId === organizationId,
+    );
   }
 }
 
 export class PostgresEnvironmentRepository implements EnvironmentRepository {
-  private store = new Map<string, Environment>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<Environment | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.environments.get(id) ?? null;
   }
 
   async findByKey(projectId: string, key: string): Promise<Environment | null> {
-    for (const env of this.store.values()) {
+    for (const env of this.storage.environments.values()) {
       if (env.projectId === projectId && env.key === key) {
         return env;
       }
@@ -163,6 +290,20 @@ export class PostgresEnvironmentRepository implements EnvironmentRepository {
   }
 
   async create(input: CreateEnvironmentInput): Promise<Environment> {
+    // Foreign key check
+    if (!this.storage.projects.has(input.projectId)) {
+      throw new Error(`Foreign key constraint failed: Project ${input.projectId} does not exist`);
+    }
+
+    // Unique constraint: projectId + key
+    for (const env of this.storage.environments.values()) {
+      if (env.projectId === input.projectId && env.key === input.key) {
+        throw new Error(
+          `Unique constraint violated: Environment key '${input.key}' already exists in project`,
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const environment: Environment = {
       id: crypto.randomUUID(),
@@ -173,12 +314,12 @@ export class PostgresEnvironmentRepository implements EnvironmentRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(environment.id, environment);
+    this.storage.environments.set(environment.id, environment);
     return environment;
   }
 
   async update(id: string, input: UpdateEnvironmentInput): Promise<Environment | null> {
-    const existing = this.store.get(id);
+    const existing = this.storage.environments.get(id);
     if (!existing) return null;
     const updated: Environment = {
       ...existing,
@@ -186,32 +327,45 @@ export class PostgresEnvironmentRepository implements EnvironmentRepository {
       type: input.type ?? existing.type,
       updatedAt: new Date().toISOString(),
     };
-    this.store.set(id, updated);
+    this.storage.environments.set(id, updated);
     return updated;
   }
 
   async delete(id: string): Promise<boolean> {
-    return this.store.delete(id);
+    const existed = this.storage.environments.delete(id);
+    if (existed) {
+      // Cascade to flags
+      const flagIdsToDelete: string[] = [];
+      for (const flag of this.storage.featureFlags.values()) {
+        if (flag.environmentId === id) {
+          flagIdsToDelete.push(flag.id);
+        }
+      }
+      for (const flagId of flagIdsToDelete) {
+        this.storage.featureFlags.delete(flagId);
+      }
+    }
+    return existed;
   }
 
   async listAll(): Promise<Environment[]> {
-    return Array.from(this.store.values());
+    return Array.from(this.storage.environments.values());
   }
 
   async listByProject(projectId: string): Promise<Environment[]> {
-    return Array.from(this.store.values()).filter((e) => e.projectId === projectId);
+    return Array.from(this.storage.environments.values()).filter((e) => e.projectId === projectId);
   }
 }
 
 export class PostgresFeatureFlagRepository implements FeatureFlagRepository {
-  private store = new Map<string, FeatureFlag>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<FeatureFlag | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.featureFlags.get(id) ?? null;
   }
 
   async findByKey(environmentId: string, key: string): Promise<FeatureFlag | null> {
-    for (const flag of this.store.values()) {
+    for (const flag of this.storage.featureFlags.values()) {
       if (flag.environmentId === environmentId && flag.key === key) {
         return flag;
       }
@@ -220,6 +374,20 @@ export class PostgresFeatureFlagRepository implements FeatureFlagRepository {
   }
 
   async create(input: CreateFeatureFlagInput): Promise<FeatureFlag> {
+    if (!this.storage.environments.has(input.environmentId)) {
+      throw new Error(
+        `Foreign key constraint failed: Environment ${input.environmentId} does not exist`,
+      );
+    }
+
+    for (const flag of this.storage.featureFlags.values()) {
+      if (flag.environmentId === input.environmentId && flag.key === input.key) {
+        throw new Error(
+          `Unique constraint violated: FeatureFlag key '${input.key}' already exists in environment`,
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const flag: FeatureFlag = {
       id: crypto.randomUUID(),
@@ -233,12 +401,12 @@ export class PostgresFeatureFlagRepository implements FeatureFlagRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(flag.id, flag);
+    this.storage.featureFlags.set(flag.id, flag);
     return flag;
   }
 
   async update(id: string, input: UpdateFeatureFlagInput): Promise<FeatureFlag | null> {
-    const existing = this.store.get(id);
+    const existing = this.storage.featureFlags.get(id);
     if (!existing) return null;
     const updated: FeatureFlag = {
       ...existing,
@@ -248,31 +416,48 @@ export class PostgresFeatureFlagRepository implements FeatureFlagRepository {
       enabled: input.enabled !== undefined ? input.enabled : existing.enabled,
       updatedAt: new Date().toISOString(),
     };
-    this.store.set(id, updated);
+    this.storage.featureFlags.set(id, updated);
     return updated;
   }
 
   async delete(id: string): Promise<boolean> {
-    return this.store.delete(id);
+    const existed = this.storage.featureFlags.delete(id);
+    if (existed) {
+      for (const rule of [...this.storage.targetingRules.values()]) {
+        if (rule.featureFlagId === id) this.storage.targetingRules.delete(rule.id);
+      }
+      for (const roll of [...this.storage.rollouts.values()]) {
+        if (roll.featureFlagId === id) this.storage.rollouts.delete(roll.id);
+      }
+    }
+    return existed;
   }
 
   async listAll(): Promise<FeatureFlag[]> {
-    return Array.from(this.store.values());
+    return Array.from(this.storage.featureFlags.values());
   }
 
   async listByEnvironment(environmentId: string): Promise<FeatureFlag[]> {
-    return Array.from(this.store.values()).filter((f) => f.environmentId === environmentId);
+    return Array.from(this.storage.featureFlags.values()).filter(
+      (f) => f.environmentId === environmentId,
+    );
   }
 }
 
 export class PostgresTargetingRuleRepository implements TargetingRuleRepository {
-  private store = new Map<string, TargetingRule>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<TargetingRule | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.targetingRules.get(id) ?? null;
   }
 
   async create(input: CreateTargetingRuleInput): Promise<TargetingRule> {
+    if (!this.storage.featureFlags.has(input.featureFlagId)) {
+      throw new Error(
+        `Foreign key constraint failed: FeatureFlag ${input.featureFlagId} does not exist`,
+      );
+    }
+
     const now = new Date().toISOString();
     const rule: TargetingRule = {
       id: crypto.randomUUID(),
@@ -284,12 +469,12 @@ export class PostgresTargetingRuleRepository implements TargetingRuleRepository 
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(rule.id, rule);
+    this.storage.targetingRules.set(rule.id, rule);
     return rule;
   }
 
   async update(id: string, input: UpdateTargetingRuleInput): Promise<TargetingRule | null> {
-    const existing = this.store.get(id);
+    const existing = this.storage.targetingRules.get(id);
     if (!existing) return null;
     const updated: TargetingRule = {
       ...existing,
@@ -299,34 +484,34 @@ export class PostgresTargetingRuleRepository implements TargetingRuleRepository 
       enabled: input.enabled !== undefined ? input.enabled : existing.enabled,
       updatedAt: new Date().toISOString(),
     };
-    this.store.set(id, updated);
+    this.storage.targetingRules.set(id, updated);
     return updated;
   }
 
   async delete(id: string): Promise<boolean> {
-    return this.store.delete(id);
+    return this.storage.targetingRules.delete(id);
   }
 
   async listAll(): Promise<TargetingRule[]> {
-    return Array.from(this.store.values());
+    return Array.from(this.storage.targetingRules.values());
   }
 
   async listByFeatureFlag(featureFlagId: string): Promise<TargetingRule[]> {
-    return Array.from(this.store.values())
+    return Array.from(this.storage.targetingRules.values())
       .filter((r) => r.featureFlagId === featureFlagId)
       .sort((a, b) => a.priority - b.priority);
   }
 }
 
 export class PostgresRolloutRepository implements RolloutRepository {
-  private store = new Map<string, Rollout>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<Rollout | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.rollouts.get(id) ?? null;
   }
 
   async findByFeatureFlag(featureFlagId: string): Promise<Rollout | null> {
-    for (const rollout of this.store.values()) {
+    for (const rollout of this.storage.rollouts.values()) {
       if (rollout.featureFlagId === featureFlagId) {
         return rollout;
       }
@@ -335,6 +520,18 @@ export class PostgresRolloutRepository implements RolloutRepository {
   }
 
   async create(input: CreateRolloutInput): Promise<Rollout> {
+    if (!this.storage.featureFlags.has(input.featureFlagId)) {
+      throw new Error(
+        `Foreign key constraint failed: FeatureFlag ${input.featureFlagId} does not exist`,
+      );
+    }
+
+    for (const rollout of this.storage.rollouts.values()) {
+      if (rollout.featureFlagId === input.featureFlagId) {
+        throw new Error(`Unique constraint violated: Rollout already exists for feature flag`);
+      }
+    }
+
     const now = new Date().toISOString();
     const rollout: Rollout = {
       id: crypto.randomUUID(),
@@ -345,12 +542,12 @@ export class PostgresRolloutRepository implements RolloutRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(rollout.id, rollout);
+    this.storage.rollouts.set(rollout.id, rollout);
     return rollout;
   }
 
   async update(id: string, input: UpdateRolloutInput): Promise<Rollout | null> {
-    const existing = this.store.get(id);
+    const existing = this.storage.rollouts.get(id);
     if (!existing) return null;
     const updated: Rollout = {
       ...existing,
@@ -359,31 +556,31 @@ export class PostgresRolloutRepository implements RolloutRepository {
       enabled: input.enabled !== undefined ? input.enabled : existing.enabled,
       updatedAt: new Date().toISOString(),
     };
-    this.store.set(id, updated);
+    this.storage.rollouts.set(id, updated);
     return updated;
   }
 
   async delete(id: string): Promise<boolean> {
-    return this.store.delete(id);
+    return this.storage.rollouts.delete(id);
   }
 
   async listAll(): Promise<Rollout[]> {
-    return Array.from(this.store.values());
+    return Array.from(this.storage.rollouts.values());
   }
 }
 
 export class PostgresConfigurationVersionRepository implements ConfigurationVersionRepository {
-  private store = new Map<string, ConfigurationVersion>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<ConfigurationVersion | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.configurationVersions.get(id) ?? null;
   }
 
   async findByVersion(
     environmentId: string,
     version: number,
   ): Promise<ConfigurationVersion | null> {
-    for (const v of this.store.values()) {
+    for (const v of this.storage.configurationVersions.values()) {
       if (v.environmentId === environmentId && v.version === version) {
         return v;
       }
@@ -397,6 +594,20 @@ export class PostgresConfigurationVersionRepository implements ConfigurationVers
   }
 
   async create(input: CreateConfigurationVersionInput): Promise<ConfigurationVersion> {
+    if (!this.storage.environments.has(input.environmentId)) {
+      throw new Error(
+        `Foreign key constraint failed: Environment ${input.environmentId} does not exist`,
+      );
+    }
+
+    for (const v of this.storage.configurationVersions.values()) {
+      if (v.environmentId === input.environmentId && v.version === input.version) {
+        throw new Error(
+          `Unique constraint violated: Configuration version ${input.version} already exists in environment`,
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const version: ConfigurationVersion = {
       id: crypto.randomUUID(),
@@ -408,25 +619,31 @@ export class PostgresConfigurationVersionRepository implements ConfigurationVers
       reason: input.reason ?? 'Configuration update',
       createdAt: now,
     };
-    this.store.set(version.id, version);
+    this.storage.configurationVersions.set(version.id, version);
     return version;
   }
 
   async listByEnvironment(environmentId: string): Promise<ConfigurationVersion[]> {
-    return Array.from(this.store.values())
+    return Array.from(this.storage.configurationVersions.values())
       .filter((v) => v.environmentId === environmentId)
       .sort((a, b) => b.version - a.version);
   }
 }
 
 export class PostgresAuditEventRepository implements AuditEventRepository {
-  private store = new Map<string, AuditEvent>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<AuditEvent | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.auditEvents.get(id) ?? null;
   }
 
   async create(input: CreateAuditEventInput): Promise<AuditEvent> {
+    if (!this.storage.organizations.has(input.organizationId)) {
+      throw new Error(
+        `Foreign key constraint failed: Organization ${input.organizationId} does not exist`,
+      );
+    }
+
     const now = new Date().toISOString();
     const event: AuditEvent = {
       id: crypto.randomUUID(),
@@ -439,32 +656,32 @@ export class PostgresAuditEventRepository implements AuditEventRepository {
       after: input.after ?? null,
       createdAt: now,
     };
-    this.store.set(event.id, event);
+    this.storage.auditEvents.set(event.id, event);
     return event;
   }
 
   async listByOrganization(organizationId: string): Promise<AuditEvent[]> {
-    return Array.from(this.store.values())
+    return Array.from(this.storage.auditEvents.values())
       .filter((e) => e.organizationId === organizationId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async listByResource(resourceType: string, resourceId: string): Promise<AuditEvent[]> {
-    return Array.from(this.store.values())
+    return Array.from(this.storage.auditEvents.values())
       .filter((e) => e.resourceType === resourceType && e.resourceId === resourceId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 }
 
 export class PostgresUserRepository implements UserRepository {
-  private store = new Map<string, User>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<User | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.users.get(id) ?? null;
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    for (const user of this.store.values()) {
+    for (const user of this.storage.users.values()) {
       if (user.email.toLowerCase() === email.toLowerCase()) {
         return user;
       }
@@ -473,6 +690,12 @@ export class PostgresUserRepository implements UserRepository {
   }
 
   async create(input: CreateUserInput): Promise<User> {
+    for (const user of this.storage.users.values()) {
+      if (user.email.toLowerCase() === input.email.toLowerCase()) {
+        throw new Error(`Unique constraint violated: Email ${input.email} is already registered`);
+      }
+    }
+
     const now = new Date().toISOString();
     const user: User = {
       id: crypto.randomUUID(),
@@ -481,24 +704,24 @@ export class PostgresUserRepository implements UserRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(user.id, user);
+    this.storage.users.set(user.id, user);
     return user;
   }
 
   async listAll(): Promise<User[]> {
-    return Array.from(this.store.values());
+    return Array.from(this.storage.users.values());
   }
 }
 
 export class PostgresRoleRepository implements RoleRepository {
-  private store = new Map<string, Role>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<Role | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.roles.get(id) ?? null;
   }
 
   async findByName(organizationId: string, name: string): Promise<Role | null> {
-    for (const role of this.store.values()) {
+    for (const role of this.storage.roles.values()) {
       if (role.organizationId === organizationId && role.name === name) {
         return role;
       }
@@ -507,6 +730,20 @@ export class PostgresRoleRepository implements RoleRepository {
   }
 
   async create(input: CreateRoleInput): Promise<Role> {
+    if (!this.storage.organizations.has(input.organizationId)) {
+      throw new Error(
+        `Foreign key constraint failed: Organization ${input.organizationId} does not exist`,
+      );
+    }
+
+    for (const role of this.storage.roles.values()) {
+      if (role.organizationId === input.organizationId && role.name === input.name) {
+        throw new Error(
+          `Unique constraint violated: Role '${input.name}' already exists in organization`,
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const role: Role = {
       id: crypto.randomUUID(),
@@ -517,24 +754,26 @@ export class PostgresRoleRepository implements RoleRepository {
       createdAt: now,
       updatedAt: now,
     };
-    this.store.set(role.id, role);
+    this.storage.roles.set(role.id, role);
     return role;
   }
 
   async listByOrganization(organizationId: string): Promise<Role[]> {
-    return Array.from(this.store.values()).filter((r) => r.organizationId === organizationId);
+    return Array.from(this.storage.roles.values()).filter(
+      (r) => r.organizationId === organizationId,
+    );
   }
 }
 
 export class PostgresApiKeyRepository implements ApiKeyRepository {
-  private store = new Map<string, ApiKey>();
+  constructor(private storage: DatabaseStorage) {}
 
   async findById(id: string): Promise<ApiKey | null> {
-    return this.store.get(id) ?? null;
+    return this.storage.apiKeys.get(id) ?? null;
   }
 
   async findByKeyHash(keyHash: string): Promise<ApiKey | null> {
-    for (const key of this.store.values()) {
+    for (const key of this.storage.apiKeys.values()) {
       if (key.keyHash === keyHash) {
         return key;
       }
@@ -543,6 +782,23 @@ export class PostgresApiKeyRepository implements ApiKeyRepository {
   }
 
   async create(input: CreateApiKeyInput): Promise<ApiKey> {
+    if (!this.storage.organizations.has(input.organizationId)) {
+      throw new Error(
+        `Foreign key constraint failed: Organization ${input.organizationId} does not exist`,
+      );
+    }
+    if (input.environmentId && !this.storage.environments.has(input.environmentId)) {
+      throw new Error(
+        `Foreign key constraint failed: Environment ${input.environmentId} does not exist`,
+      );
+    }
+
+    for (const key of this.storage.apiKeys.values()) {
+      if (key.keyHash === input.keyHash) {
+        throw new Error(`Unique constraint violated: API Key hash already exists`);
+      }
+    }
+
     const now = new Date().toISOString();
     const apiKey: ApiKey = {
       id: crypto.randomUUID(),
@@ -555,38 +811,43 @@ export class PostgresApiKeyRepository implements ApiKeyRepository {
       createdAt: now,
       expiresAt: input.expiresAt,
     };
-    this.store.set(apiKey.id, apiKey);
+    this.storage.apiKeys.set(apiKey.id, apiKey);
     return apiKey;
   }
 
   async listByOrganization(organizationId: string): Promise<ApiKey[]> {
-    return Array.from(this.store.values()).filter((k) => k.organizationId === organizationId);
+    return Array.from(this.storage.apiKeys.values()).filter(
+      (k) => k.organizationId === organizationId,
+    );
   }
 
   async listByEnvironment(environmentId: string): Promise<ApiKey[]> {
-    return Array.from(this.store.values()).filter((k) => k.environmentId === environmentId);
+    return Array.from(this.storage.apiKeys.values()).filter(
+      (k) => k.environmentId === environmentId,
+    );
   }
 
   async delete(id: string): Promise<boolean> {
-    return this.store.delete(id);
+    return this.storage.apiKeys.delete(id);
   }
 }
 
 /**
  * Creates a fully instantiated PostgreSQL implementation container
  */
-export function createRepositoryContainer(): RepositoryContainer {
+export function createRepositoryContainer(customStorage?: DatabaseStorage): RepositoryContainer {
+  const storage = customStorage ?? createDatabaseStorage();
   return {
-    organizations: new PostgresOrganizationRepository(),
-    projects: new PostgresProjectRepository(),
-    environments: new PostgresEnvironmentRepository(),
-    featureFlags: new PostgresFeatureFlagRepository(),
-    targetingRules: new PostgresTargetingRuleRepository(),
-    rollouts: new PostgresRolloutRepository(),
-    configurationVersions: new PostgresConfigurationVersionRepository(),
-    auditEvents: new PostgresAuditEventRepository(),
-    users: new PostgresUserRepository(),
-    roles: new PostgresRoleRepository(),
-    apiKeys: new PostgresApiKeyRepository(),
+    organizations: new PostgresOrganizationRepository(storage),
+    projects: new PostgresProjectRepository(storage),
+    environments: new PostgresEnvironmentRepository(storage),
+    featureFlags: new PostgresFeatureFlagRepository(storage),
+    targetingRules: new PostgresTargetingRuleRepository(storage),
+    rollouts: new PostgresRolloutRepository(storage),
+    configurationVersions: new PostgresConfigurationVersionRepository(storage),
+    auditEvents: new PostgresAuditEventRepository(storage),
+    users: new PostgresUserRepository(storage),
+    roles: new PostgresRoleRepository(storage),
+    apiKeys: new PostgresApiKeyRepository(storage),
   };
 }
