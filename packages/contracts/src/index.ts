@@ -538,8 +538,69 @@ export const CreateUserInputSchema = z.object({
 export type CreateUserInput = z.infer<typeof CreateUserInputSchema>;
 
 export const RoleIdSchema = z.string().uuid({ message: 'Role ID must be a valid UUID' });
+export const StandardRoleSchema = z.enum(['OWNER', 'ADMIN', 'DEVELOPER', 'VIEWER']);
+export type StandardRole = z.infer<typeof StandardRoleSchema>;
+
 export const RoleNameSchema = z.string().trim().min(1).max(64);
 export const RolePermissionsSchema = z.array(z.string().min(1)).default([]);
+
+export const STANDARD_ROLES = {
+  OWNER: 'OWNER',
+  ADMIN: 'ADMIN',
+  DEVELOPER: 'DEVELOPER',
+  VIEWER: 'VIEWER',
+} as const;
+
+export const STANDARD_ROLE_METADATA: Record<
+  StandardRole,
+  { name: string; description: string; defaultPermissions: string[] }
+> = {
+  OWNER: {
+    name: 'Owner',
+    description: 'Full organization authority, project lifecycle, and administrative ownership',
+    defaultPermissions: ['*'],
+  },
+  ADMIN: {
+    name: 'Admin',
+    description: 'Full project, environment, flag, and user management authority',
+    defaultPermissions: [
+      'projects:*',
+      'environments:*',
+      'flags:*',
+      'rules:*',
+      'rollouts:*',
+      'versions:*',
+      'audit:read',
+    ],
+  },
+  DEVELOPER: {
+    name: 'Developer',
+    description:
+      'Feature flag authoring, condition targeting, and non-production release management',
+    defaultPermissions: [
+      'projects:read',
+      'environments:read',
+      'flags:*',
+      'rules:*',
+      'rollouts:*',
+      'versions:read',
+      'versions:create',
+      'audit:read',
+    ],
+  },
+  VIEWER: {
+    name: 'Viewer',
+    description: 'Read-only visibility of flags, environments, and configuration snapshots',
+    defaultPermissions: [
+      'projects:read',
+      'environments:read',
+      'flags:read',
+      'rules:read',
+      'rollouts:read',
+      'versions:read',
+    ],
+  },
+};
 
 export const RoleSchema = z.object({
   id: RoleIdSchema,
@@ -556,7 +617,7 @@ export const CreateRoleInputSchema = z.object({
   organizationId: OrganizationIdSchema,
   name: RoleNameSchema,
   description: z.string().max(255).optional(),
-  permissions: RolePermissionsSchema,
+  permissions: RolePermissionsSchema.optional(),
 });
 export type CreateRoleInput = z.infer<typeof CreateRoleInputSchema>;
 

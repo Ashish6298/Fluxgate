@@ -84,6 +84,17 @@ import {
   AuditResourceIdSchema,
   CreateAuditEventInput,
   CreateAuditEventInputSchema,
+  Role,
+  RoleSchema,
+  RoleIdSchema,
+  RoleNameSchema,
+  RolePermissionsSchema,
+  CreateRoleInput,
+  CreateRoleInputSchema,
+  StandardRole,
+  StandardRoleSchema,
+  STANDARD_ROLES,
+  STANDARD_ROLE_METADATA,
 } from '@controlplane/contracts';
 import { randomUUID, createHash } from 'node:crypto';
 
@@ -1134,5 +1145,128 @@ export class InMemoryAuditEventRepository implements AuditEventRepository {
     return this.orderedEventIds
       .map((id) => this.events.get(id)!)
       .filter((e) => e.actorId === actorId);
+  }
+}
+
+// --- Role Domain Model (Milestone 4.1) ---
+
+export {
+  type Role,
+  type CreateRoleInput,
+  type StandardRole,
+  RoleSchema,
+  RoleIdSchema,
+  RoleNameSchema,
+  RolePermissionsSchema,
+  CreateRoleInputSchema,
+  StandardRoleSchema,
+  STANDARD_ROLES,
+  STANDARD_ROLE_METADATA,
+};
+
+export interface CreateRoleProps {
+  organizationId: string;
+  name: string;
+  description?: string;
+  permissions?: string[];
+  id?: string;
+}
+
+/**
+ * Validates and instantiates an immutable Role domain entity.
+ */
+export function createRole(props: CreateRoleProps): Role {
+  const validatedOrgId = OrganizationIdSchema.parse(props.organizationId);
+  const validatedName = RoleNameSchema.parse(props.name);
+  const validatedPermissions = RolePermissionsSchema.parse(props.permissions ?? []);
+  const roleId = props.id ? RoleIdSchema.parse(props.id) : randomUUID();
+  const now = new Date().toISOString();
+
+  const rawRole: Role = {
+    id: roleId,
+    organizationId: validatedOrgId,
+    name: validatedName,
+    description: props.description,
+    permissions: validatedPermissions,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  return RoleSchema.parse(rawRole);
+}
+
+/**
+ * Creates standard predefined system roles (Owner, Admin, Developer, Viewer) for a new organization.
+ */
+export function createStandardRoles(organizationId: string): Role[] {
+  return (Object.keys(STANDARD_ROLE_METADATA) as StandardRole[]).map((roleKey) => {
+    const meta = STANDARD_ROLE_METADATA[roleKey];
+    return createRole({
+      organizationId,
+      name: meta.name,
+      description: meta.description,
+      permissions: meta.defaultPermissions,
+    });
+  });
+}
+
+export interface RoleRepository {
+  create(input: CreateRoleInput, id?: string): Promise<Role>;
+  findById(id: string): Promise<Role | null>;
+  findByOrganizationAndName(organizationId: string, name: string): Promise<Role | null>;
+  listByOrganization(organizationId: string): Promise<Role[]>;
+  delete(id: string): Promise<boolean>;
+}
+
+export class InMemoryRoleRepository implements RoleRepository {
+  private roles = new Map<string, Role>();
+
+  async create(input: CreateRoleInput, id?: string): Promise<Role> {
+    const roleId = id ?? randomUUID();
+    if (this.roles.has(roleId)) {
+      throw new Error(`Role with ID '${roleId}' already exists`);
+    }
+
+    const existing = Array.from(this.roles.values()).find(
+      (r) =>
+        r.organizationId === input.organizationId &&
+        r.name.toLowerCase() === input.name.toLowerCase(),
+    );
+    if (existing) {
+      throw new Error(
+        `Role with name '${input.name}' already exists in organization '${input.organizationId}'`,
+      );
+    }
+
+    const role = createRole({
+      organizationId: input.organizationId,
+      name: input.name,
+      description: input.description,
+      permissions: input.permissions,
+      id: roleId,
+    });
+
+    this.roles.set(role.id, role);
+    return role;
+  }
+
+  async findById(id: string): Promise<Role | null> {
+    return this.roles.get(id) ?? null;
+  }
+
+  async findByOrganizationAndName(organizationId: string, name: string): Promise<Role | null> {
+    return (
+      Array.from(this.roles.values()).find(
+        (r) => r.organizationId === organizationId && r.name.toLowerCase() === name.toLowerCase(),
+      ) ?? null
+    );
+  }
+
+  async listByOrganization(organizationId: string): Promise<Role[]> {
+    return Array.from(this.roles.values()).filter((r) => r.organizationId === organizationId);
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.roles.delete(id);
   }
 }
