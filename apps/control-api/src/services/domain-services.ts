@@ -60,6 +60,34 @@ export class FeatureFlagManagementService {
 
     return await this.repos.featureFlags.update(flagId, input);
   }
+
+  /**
+   * Get a feature flag (Requires VIEW_FLAGS and matching organization)
+   */
+  public async getFlag(
+    identity: AuthIdentity,
+    targetOrgId: string,
+    flagId: string,
+  ): Promise<FeatureFlag | null> {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    this.authz.enforce(identity, 'VIEW_FLAGS');
+
+    return await this.repos.featureFlags.findById(flagId);
+  }
+
+  /**
+   * Delete a feature flag (Requires MODIFY_FLAGS and matching organization)
+   */
+  public async deleteFlag(
+    identity: AuthIdentity,
+    targetOrgId: string,
+    flagId: string,
+  ): Promise<boolean> {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    this.authz.enforce(identity, 'MODIFY_FLAGS');
+
+    return await this.repos.featureFlags.delete(flagId);
+  }
 }
 
 export class RolloutManagementService {
@@ -112,6 +140,44 @@ export class ProjectManagementService {
   ) {}
 
   /**
+   * List projects for an organization (Requires matching organization)
+   */
+  public async listProjects(identity: AuthIdentity, targetOrgId: string) {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    return await this.repos.projects.listByOrganization(targetOrgId);
+  }
+
+  /**
+   * Get project by ID (Requires matching organization)
+   */
+  public async getProject(identity: AuthIdentity, targetOrgId: string, projectId: string) {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    const project = await this.repos.projects.findById(projectId);
+    if (!project || project.organizationId !== targetOrgId) {
+      return null;
+    }
+    return project;
+  }
+
+  /**
+   * Create a project (Requires ADMIN or OWNER and matching organization)
+   */
+  public async createProject(
+    identity: AuthIdentity,
+    targetOrgId: string,
+    input: { name: string; key: string },
+  ) {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    this.authz.enforceRole(identity, ['OWNER', 'ADMIN']);
+
+    return await this.repos.projects.create({
+      organizationId: targetOrgId,
+      name: input.name,
+      key: input.key,
+    });
+  }
+
+  /**
    * Delete a project (Strictly restricted to OWNER role and matching organization)
    */
   public async deleteProject(
@@ -123,5 +189,73 @@ export class ProjectManagementService {
     this.authz.enforce(identity, 'DELETE_PROJECT');
 
     return await this.repos.projects.delete(projectId);
+  }
+}
+
+export class EnvironmentManagementService {
+  constructor(
+    private repos: RepositoryContainer = createRepositoryContainer(),
+    private authz: AuthorizationService = new AuthorizationService(),
+  ) {}
+
+  /**
+   * List environments in a project (Requires matching organization)
+   */
+  public async listEnvironments(
+    identity: AuthIdentity,
+    targetOrgId: string,
+    projectId: string,
+  ) {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    // Verify project belongs to tenant
+    const project = await this.repos.projects.findById(projectId);
+    if (!project || project.organizationId !== targetOrgId) {
+      return [];
+    }
+    return await this.repos.environments.listByProject(projectId);
+  }
+
+  /**
+   * Get environment by ID (Requires matching organization)
+   */
+  public async getEnvironment(
+    identity: AuthIdentity,
+    targetOrgId: string,
+    environmentId: string,
+  ) {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    const env = await this.repos.environments.findById(environmentId);
+    if (!env) return null;
+
+    const project = await this.repos.projects.findById(env.projectId);
+    if (!project || project.organizationId !== targetOrgId) {
+      return null;
+    }
+    return env;
+  }
+
+  /**
+   * Create an environment (Requires ADMIN or OWNER and matching organization)
+   */
+  public async createEnvironment(
+    identity: AuthIdentity,
+    targetOrgId: string,
+    projectId: string,
+    input: { name: string; key: string; type?: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' | 'CUSTOM' },
+  ) {
+    this.authz.enforceTenantAccess(identity, targetOrgId);
+    this.authz.enforceRole(identity, ['OWNER', 'ADMIN']);
+
+    const project = await this.repos.projects.findById(projectId);
+    if (!project || project.organizationId !== targetOrgId) {
+      throw new Error(`Project ${projectId} does not exist in organization ${targetOrgId}`);
+    }
+
+    return await this.repos.environments.create({
+      projectId,
+      name: input.name,
+      key: input.key,
+      type: input.type,
+    });
   }
 }
