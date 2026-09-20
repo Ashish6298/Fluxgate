@@ -8,3 +8,4 @@ export function getControlApiInfo() {
   };
 }
 export * from './auth/index.js';
+export * from './services/domain-services.js';
