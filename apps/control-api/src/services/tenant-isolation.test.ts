@@ -258,9 +258,9 @@ describe('PHASE 4.4 — Tenant Isolation (Service Layer & Middleware)', () => {
       });
 
       it('rejects Tenant A attempting to read a specific Tenant B feature flag', async () => {
-        await expect(flagService.getFlag(tenantAOwner, tenantBOrgId, tenantBFlagId)).rejects.toThrow(
-          /Tenant isolation mismatch/,
-        );
+        await expect(
+          flagService.getFlag(tenantAOwner, tenantBOrgId, tenantBFlagId),
+        ).rejects.toThrow(/Tenant isolation mismatch/);
         await expect(flagService.getFlag(tenantADev, tenantBOrgId, tenantBFlagId)).rejects.toThrow(
           /Tenant isolation mismatch/,
         );

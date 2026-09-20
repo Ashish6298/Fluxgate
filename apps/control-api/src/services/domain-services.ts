@@ -201,11 +201,7 @@ export class EnvironmentManagementService {
   /**
    * List environments in a project (Requires matching organization)
    */
-  public async listEnvironments(
-    identity: AuthIdentity,
-    targetOrgId: string,
-    projectId: string,
-  ) {
+  public async listEnvironments(identity: AuthIdentity, targetOrgId: string, projectId: string) {
     this.authz.enforceTenantAccess(identity, targetOrgId);
     // Verify project belongs to tenant
     const project = await this.repos.projects.findById(projectId);
@@ -218,11 +214,7 @@ export class EnvironmentManagementService {
   /**
    * Get environment by ID (Requires matching organization)
    */
-  public async getEnvironment(
-    identity: AuthIdentity,
-    targetOrgId: string,
-    environmentId: string,
-  ) {
+  public async getEnvironment(identity: AuthIdentity, targetOrgId: string, environmentId: string) {
     this.authz.enforceTenantAccess(identity, targetOrgId);
     const env = await this.repos.environments.findById(environmentId);
     if (!env) return null;
@@ -241,7 +233,11 @@ export class EnvironmentManagementService {
     identity: AuthIdentity,
     targetOrgId: string,
     projectId: string,
-    input: { name: string; key: string; type?: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' | 'CUSTOM' },
+    input: {
+      name: string;
+      key: string;
+      type?: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' | 'CUSTOM';
+    },
   ) {
     this.authz.enforceTenantAccess(identity, targetOrgId);
     this.authz.enforceRole(identity, ['OWNER', 'ADMIN']);

@@ -55,9 +55,9 @@ describe('Phase 4.4 — Tenant Isolation Contract & Critical Invariant', () => {
     ).rejects.toThrow(/Tenant isolation mismatch/);
 
     // Delete project across boundaries
-    await expect(projectService.deleteProject(tenantAOwner, tenantB, 'some-proj-id')).rejects.toThrow(
-      /Tenant isolation mismatch/,
-    );
+    await expect(
+      projectService.deleteProject(tenantAOwner, tenantB, 'some-proj-id'),
+    ).rejects.toThrow(/Tenant isolation mismatch/);
   });
 
   it('Critical Invariant: Tenant A CANNOT access Tenant B environments (Cross-organization environment access MUST fail)', async () => {
@@ -67,9 +67,9 @@ describe('Phase 4.4 — Tenant Isolation Contract & Critical Invariant', () => {
     ).rejects.toThrow(/Tenant isolation mismatch/);
 
     // Get environment across boundaries
-    await expect(
-      envService.getEnvironment(tenantAOwner, tenantB, 'some-env-id'),
-    ).rejects.toThrow(/Tenant isolation mismatch/);
+    await expect(envService.getEnvironment(tenantAOwner, tenantB, 'some-env-id')).rejects.toThrow(
+      /Tenant isolation mismatch/,
+    );
 
     // Create environment across boundaries
     await expect(
@@ -108,9 +108,9 @@ describe('Phase 4.4 — Tenant Isolation Contract & Critical Invariant', () => {
     ).rejects.toThrow(/Tenant isolation mismatch/);
 
     // Delete flag across boundaries
-    await expect(
-      flagService.deleteFlag(tenantAOwner, tenantB, 'some-flag-id'),
-    ).rejects.toThrow(/Tenant isolation mismatch/);
+    await expect(flagService.deleteFlag(tenantAOwner, tenantB, 'some-flag-id')).rejects.toThrow(
+      /Tenant isolation mismatch/,
+    );
   });
 
   it('Critical Invariant: Tenant B CANNOT access Tenant A resources (Symmetric isolation MUST fail)', async () => {

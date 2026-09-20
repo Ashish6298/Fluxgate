@@ -21,6 +21,7 @@ Every operation traversing projects, environments, feature flags, targeting rule
 ## 2. Invariant & Architecture
 
 ### Critical Invariant
+
 ```text
 Tenant A
 
@@ -32,6 +33,7 @@ Tenant B
 ```
 
 ### Defense in Depth Layers
+
 1. **Middleware Level (`AuthMiddleware.authorize`)**: Inspects tokens, resolves `AuthIdentity.organizationId`, and compares against `targetOrganizationId` parsed from HTTP paths/headers.
 2. **Service Level (`AuthorizationService.enforceTenantAccess`)**: Domain management services (`ProjectManagementService`, `EnvironmentManagementService`, `FeatureFlagManagementService`, `RolloutManagementService`) evaluate `identity.organizationId === targetOrgId` prior to executing any repository read/write.
 3. **Repository Level (`PostgresRepository`)**: All relational queries enforce foreign-key cascading and organizational filtering.
@@ -40,24 +42,24 @@ Tenant B
 
 ## 3. Required Tests & Results
 
-| Test Category | Target Resource | Tenant A Attempt | Expected Outcome | Actual Result |
-| :--- | :--- | :--- | :--- | :--- |
-| **Cross-Org Project Access** | Project List | List Tenant B projects | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Project Access** | Project Read | Fetch Tenant B project by ID | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Project Access** | Project Create | Create project under Tenant B | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Project Access** | Project Delete | Delete Tenant B project | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Environment Access** | Env List | List environments in Tenant B project | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Environment Access** | Env Read | Fetch Tenant B environment | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Environment Access** | Env Create | Create environment under Tenant B | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Flag Access** | Flag List | List flags in Tenant B environment (Owner/Admin/Dev/Viewer) | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Flag Access** | Flag Read | Read flag in Tenant B | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Flag Access** | Flag Create | Create flag in Tenant B environment | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Flag Access** | Flag Update | Modify flag in Tenant B environment | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Flag Access** | Flag Delete | Delete flag in Tenant B environment | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Rollouts** | Rollout Execute | Execute rollout on Tenant B flag | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Cross-Org Rollouts** | Version Rollback | Rollback Tenant B config version | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Symmetric Isolation** | All Resources | Tenant B attempts to access Tenant A | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
-| **Anonymous/No-Org Access** | All Resources | Identity without `organizationId` | `403 Forbidden` (`ORGANIZATION_REQUIRED`) | :white_check_mark: PASSED |
+| Test Category                    | Target Resource  | Tenant A Attempt                                            | Expected Outcome                              | Actual Result             |
+| :------------------------------- | :--------------- | :---------------------------------------------------------- | :-------------------------------------------- | :------------------------ |
+| **Cross-Org Project Access**     | Project List     | List Tenant B projects                                      | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Project Access**     | Project Read     | Fetch Tenant B project by ID                                | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Project Access**     | Project Create   | Create project under Tenant B                               | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Project Access**     | Project Delete   | Delete Tenant B project                                     | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Environment Access** | Env List         | List environments in Tenant B project                       | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Environment Access** | Env Read         | Fetch Tenant B environment                                  | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Environment Access** | Env Create       | Create environment under Tenant B                           | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Flag Access**        | Flag List        | List flags in Tenant B environment (Owner/Admin/Dev/Viewer) | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Flag Access**        | Flag Read        | Read flag in Tenant B                                       | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Flag Access**        | Flag Create      | Create flag in Tenant B environment                         | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Flag Access**        | Flag Update      | Modify flag in Tenant B environment                         | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Flag Access**        | Flag Delete      | Delete flag in Tenant B environment                         | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Rollouts**           | Rollout Execute  | Execute rollout on Tenant B flag                            | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Cross-Org Rollouts**           | Version Rollback | Rollback Tenant B config version                            | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Symmetric Isolation**          | All Resources    | Tenant B attempts to access Tenant A                        | `403 Forbidden` (`TENANT_ISOLATION_MISMATCH`) | :white_check_mark: PASSED |
+| **Anonymous/No-Org Access**      | All Resources    | Identity without `organizationId`                           | `403 Forbidden` (`ORGANIZATION_REQUIRED`)     | :white_check_mark: PASSED |
 
 ---
 

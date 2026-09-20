@@ -11,6 +11,7 @@
 ## 1. Milestone Overview & Objectives
 
 Milestone 4 ensures that users can only perform authorized actions and strictly isolates multi-tenant boundaries:
+
 1. **Phase 4.1 — Roles**: Implementation of standard hierarchy (`Owner`, `Admin`, `Developer`, `Viewer`).
 2. **Phase 4.2 — Permission Matrix**: Deterministic permission evaluation matrix supporting unconditional grants, role denials, and dynamic environment policy overrides (`evaluatePermission`).
 3. **Phase 4.3 — Authorization Layer**: Enforcement of action and tenant constraints directly at the Service Layer and Middleware Layer.
@@ -20,12 +21,12 @@ Milestone 4 ensures that users can only perform authorized actions and strictly 
 
 ## 2. Verification Summary Matrix
 
-| Phase | Core Deliverable | Test Files | Tests Run | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **4.1 Roles** | `StandardRole` schema & validation | `packages/config-model/src/role.test.ts`, `phase-4.1-roles.test.ts` | 6 | :white_check_mark: Passed |
-| **4.2 Permission Matrix** | `evaluatePermission`, `hasPermission`, Action Matrix | `packages/config-model/src/permission-matrix.test.ts`, `phase-4.2-permission-matrix.test.ts` | 11 | :white_check_mark: Passed |
-| **4.3 Authorization Layer** | `AuthorizationService`, `DomainServices` | `apps/control-api/src/services/authorization-layer.test.ts`, `phase-4.3-authorization-layer.test.ts` | 10 | :white_check_mark: Passed |
-| **4.4 Tenant Isolation** | Cross-tenant rejection across projects, envs, flags, rollouts | `apps/control-api/src/services/tenant-isolation.test.ts`, `phase-4.4-tenant-isolation.test.ts` | 24 | :white_check_mark: Passed |
+| Phase                       | Core Deliverable                                              | Test Files                                                                                           | Tests Run | Status                    |
+| :-------------------------- | :------------------------------------------------------------ | :--------------------------------------------------------------------------------------------------- | :-------- | :------------------------ |
+| **4.1 Roles**               | `StandardRole` schema & validation                            | `packages/config-model/src/role.test.ts`, `phase-4.1-roles.test.ts`                                  | 6         | :white_check_mark: Passed |
+| **4.2 Permission Matrix**   | `evaluatePermission`, `hasPermission`, Action Matrix          | `packages/config-model/src/permission-matrix.test.ts`, `phase-4.2-permission-matrix.test.ts`         | 11        | :white_check_mark: Passed |
+| **4.3 Authorization Layer** | `AuthorizationService`, `DomainServices`                      | `apps/control-api/src/services/authorization-layer.test.ts`, `phase-4.3-authorization-layer.test.ts` | 10        | :white_check_mark: Passed |
+| **4.4 Tenant Isolation**    | Cross-tenant rejection across projects, envs, flags, rollouts | `apps/control-api/src/services/tenant-isolation.test.ts`, `phase-4.4-tenant-isolation.test.ts`       | 24        | :white_check_mark: Passed |
 
 ---
 
