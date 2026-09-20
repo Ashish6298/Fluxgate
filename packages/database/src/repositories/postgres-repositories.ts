@@ -750,7 +750,7 @@ export class PostgresRoleRepository implements RoleRepository {
       organizationId: input.organizationId,
       name: input.name,
       description: input.description,
-      permissions: input.permissions,
+      permissions: input.permissions ?? [],
       createdAt: now,
       updatedAt: now,
     };
